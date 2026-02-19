@@ -1,96 +1,169 @@
 # OH-MY-AKG
 
-Module Health Radar + Architecture Knowledge Graph를 위한 로컬 우선(Local-first) 분석 도구입니다.
+[한국어](README.ko.md)
 
-- GitHub 조직 레포를 동기화하고
-- 프로젝트/의존성 데이터를 로컬 DB(PGlite)에 저장하며
-- Overview / Dependency Graph / Architecture 화면에서 구조를 탐색합니다.
+> A Living Architecture Map for MSA Teams\
+> *Stop guessing your system. Start seeing it clearly.*
 
-## 핵심 목적
+------------------------------------------------------------------------
 
-이 프로젝트의 1차 목표는 다음입니다.
+## 🚨 The Challenge
 
-1. 프로젝트 인벤토리를 최신으로 유지
-2. 프로젝트 간 의존성과 계층 구조를 시각적으로 파악
-3. Type/Tag/Alias/Visibility로 실무 관점의 분류 제공
-4. 향후 승인 기반 의존성 관리와 Agent 질의응답으로 확장
+Operating microservices often raises difficult questions:
 
-## 현재 주요 기능
+-   Which services depend on this one?
+-   Why did a small change cause unexpected failures elsewhere?
+-   Is the architecture document still accurate?
+-   How many people truly understand the entire system?
 
-- Overview
-  - 프로젝트 목록 조회/검색
-  - Alias, Type, Visibility 편집
-  - 태그 추가/삭제
-  - CSV Export
-- Dependency Graph
-  - 프로젝트 의존성 시각화
-  - 노드 선택/하이라이트
-  - 검색어 기반 노드 하이라이트
-  - 우클릭 숨김(HIDDEN)
-- Architecture
-  - Settings의 Type/순서 기반 Top-down 계층 뷰
-  - 엣지 타입별 토글(All + 동적 타입)
-  - PNG Export
-- Settings
-  - Type 추가/수정/활성화/삭제/순서 조정
-  - Tag 추가/수정/삭제
+Microservice architectures evolve faster than documentation.
 
-## 기술 스택
+OH-MY-AKG addresses this gap by transforming your GitHub organization
+into a **live, explorable architecture map** --- helping teams
+understand, analyze, and share their system structure with confidence.
 
-- Next.js (App Router)
-- React + TypeScript
-- Cytoscape.js (Graph 시각화)
-- PGlite (로컬 Postgres 호환 DB)
-- Radix UI, Sonner
+------------------------------------------------------------------------
 
-## 실행 방법
+## 🧭 What OH-MY-AKG Provides
 
-### 1) 의존성 설치
+OH-MY-AKG analyzes repositories within your GitHub organization and
+delivers:
 
-```bash
+-   🔍 A searchable service overview
+-   🔗 A dependency graph with inbound/outbound visibility
+-   🏗 A layered architecture view
+-   🏷 Team-driven classification (Type, Tag, Alias, Visibility)
+-   📤 CSV and PNG export capabilities
+
+It is not a static documentation tool --- it is an operational
+visibility tool for real-world MSA environments.
+
+------------------------------------------------------------------------
+
+## ✨ Key Features
+
+### 1. Overview
+
+-   Project list with search
+-   Alias / Type / Visibility management
+-   Tag creation and editing
+-   CSV export
+
+This allows teams to align on a shared structural language.
+
+------------------------------------------------------------------------
+
+### 2. Dependency Graph
+
+-   Interactive visualization of service dependencies
+-   Inbound / Outbound relationship inspection
+-   Search-based node highlighting
+-   Right-click hide (HIDDEN)
+
+This makes impact analysis before release significantly easier.
+
+------------------------------------------------------------------------
+
+### 3. Architecture View
+
+-   Type-based top-down layered structure
+-   Edge-type filtering (All + dynamic types)
+-   PNG export
+
+Provides a clear structural perspective for architectural discussions.
+
+------------------------------------------------------------------------
+
+### 4. Settings
+
+-   Create / update / reorder Types
+-   Create / update / delete Tags
+
+The classification model is flexible and evolves with your team.
+
+------------------------------------------------------------------------
+
+## ✅ Who Should Use This
+
+-   Teams actively operating MSA environments
+-   Organizations managing multiple repositories
+-   Backend / platform teams requiring impact analysis
+-   Companies with high onboarding complexity
+-   Projects where keeping documentation up to date is difficult
+
+If your architecture must be explainable and operationally visible, this
+tool is designed for you.
+
+------------------------------------------------------------------------
+
+## 🛠 Tech Stack
+
+-   Next.js (App Router)
+-   React + TypeScript
+-   Cytoscape.js (Graph visualization)
+-   PGlite (Local Postgres-compatible DB)
+-   Radix UI
+-   Sonner
+
+------------------------------------------------------------------------
+
+## 🚀 Getting Started
+
+### 1. Install dependencies
+
+``` bash
 pnpm install
 ```
 
-### 2) 개발 서버 실행
+### 2. Start development server
 
-```bash
+``` bash
 pnpm dev
 ```
 
-브라우저에서 `http://localhost:3000` 접속
+Open your browser at:
 
-## CLI 사용
+    http://localhost:3000
 
-기본 CLI 명령:
+------------------------------------------------------------------------
 
-```bash
+## 🧑‍💻 CLI Usage
+
+``` bash
 pnpm cli sync <org>
 pnpm cli status
 ```
 
-환경변수(`.env`) 예시:
+Example `.env` configuration:
 
-```bash
+``` env
 GITHUB_TOKEN=your_token
 GITHUB_ORG=your_org
 OPENAI_API_KEY=your_openai_key
 ```
 
-## 데이터/스키마
+------------------------------------------------------------------------
 
-- DB 파일 경로: `data/akg-db`
-- 스키마: `scripts/schema.sql`
+## 🗄 Data & Schema
 
-## 문서
+-   Database file: `data/akg-db`
+-   Schema definition: `scripts/schema.sql`
 
-- PRD: `PRD.md`
-- 요구사항 갭/실행 계획: `docs/2026-02-19_requirements-gap-and-plan.md`
+------------------------------------------------------------------------
 
-## 해야 할 일 (요약)
+## 🔮 Roadmap
 
-- 승인 워크플로우(change_request) 도입
-- MW(미들웨어) 관계 모델링 고도화
-- Kafka View 구현
-- draw.io Export 구현
-- Agent Chat RAG 고도화
-- Docker화 및 설치 가능한 배포 구조 설계/구현
+-   Approval workflow (change_request)
+-   Advanced middleware relationship modeling
+-   Kafka View
+-   draw.io export support
+-   Agent Chat RAG enhancement
+-   Dockerized deployment support
+
+------------------------------------------------------------------------
+
+## 📌 Summary
+
+> OH-MY-AKG is not documentation.\
+> It is a **practical architecture map for operating microservices
+> systems.**
