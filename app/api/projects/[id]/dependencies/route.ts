@@ -27,6 +27,7 @@ export async function GET(_: NextRequest, context: ParamsContext) {
                   JOIN projects p ON p.id = e.from_id
                   WHERE e.to_id = $1
                     AND p.status = 'ACTIVE'
+                    AND e.approved = TRUE
                   ORDER BY p.repo_name ASC
                 `,
                 [projectId]
@@ -41,6 +42,7 @@ export async function GET(_: NextRequest, context: ParamsContext) {
                   JOIN projects p ON p.id = e.to_id
                   WHERE e.from_id = $1
                     AND p.status = 'ACTIVE'
+                    AND e.approved = TRUE
                   ORDER BY p.repo_name ASC
                 `,
                 [projectId]

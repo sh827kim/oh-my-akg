@@ -116,3 +116,6 @@ CREATE TABLE IF NOT EXISTS change_requests (
   status TEXT DEFAULT 'PENDING', -- 'PENDING', 'APPROVED', 'REJECTED'
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS edges_unique_triplet_idx
+  ON edges (from_id, to_id, type);

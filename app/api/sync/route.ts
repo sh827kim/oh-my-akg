@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json().catch(() => ({}));
         const org = (typeof body.org === 'string' ? body.org : process.env.GITHUB_ORG)?.trim();
+        const dependencyCandidates = Array.isArray(body.dependency_candidates) ? body.dependency_candidates : [];
 
         if (!org) {
             return NextResponse.json(
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest) {
         let created = 0;
         let updated = 0;
         let deleted = 0;
+        let changeRequestsCreated = 0;
 
         const seenIds = new Set<string>();
         for (const repo of repos) {
@@ -115,12 +117,39 @@ export async function POST(req: NextRequest) {
             deleted++;
         }
 
+
+        for (const candidate of dependencyCandidates) {
+            const fromId = typeof candidate?.fromId === 'string' ? candidate.fromId : null;
+            const toId = typeof candidate?.toId === 'string' ? candidate.toId : null;
+            const type = typeof candidate?.type === 'string' ? candidate.type : 'unknown';
+            if (!fromId || !toId) continue;
+
+            const dedupe = await db.query<{ id: number }>(
+                `SELECT id FROM change_requests
+                 WHERE status = 'PENDING'
+                   AND change_type = 'DEPENDENCY_UPSERT'
+                   AND payload @> $1::jsonb
+                 LIMIT 1`,
+                [JSON.stringify({ fromId, toId, type })]
+            );
+
+            if (dedupe.rows.length > 0) continue;
+
+            await db.query(
+                `INSERT INTO change_requests (project_id, change_type, payload, status)
+                 VALUES ($1, 'DEPENDENCY_UPSERT', $2::jsonb, 'PENDING')`,
+                [fromId, JSON.stringify({ fromId, toId, type })]
+            );
+            changeRequestsCreated++;
+        }
+
         return NextResponse.json({
             success: true,
             org,
             created,
             updated,
             deleted,
+            changeRequestsCreated,
             total: repos.length,
         });
     } catch (error) {

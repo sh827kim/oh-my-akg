@@ -71,13 +71,14 @@ export async function POST() {
 
         for (const e of edges) {
             await db.query(
-                "INSERT INTO edges (from_id, to_id, type) VALUES ($1, $2, $3)",
+                "INSERT INTO edges (from_id, to_id, type, approved) VALUES ($1, $2, $3, TRUE)",
                 [e.source, e.target, e.type]
             );
         }
 
         return NextResponse.json({ success: true, message: "Sample data seeded successfully" });
-    } catch (error: any) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return NextResponse.json({ success: false, error: message }, { status: 500 });
     }
 }

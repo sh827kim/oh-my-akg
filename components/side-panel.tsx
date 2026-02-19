@@ -49,6 +49,7 @@ export async function SidePanel({ nodeId, searchQuery }: SidePanelProps) {
           WHERE e.to_id = $1
             AND p.visibility = 'VISIBLE'
             AND p.status = 'ACTIVE'
+            AND e.approved = TRUE
           ORDER BY p.repo_name ASC
         `,
         [nodeId]
@@ -65,6 +66,7 @@ export async function SidePanel({ nodeId, searchQuery }: SidePanelProps) {
           WHERE e.from_id = $1
             AND p.visibility = 'VISIBLE'
             AND p.status = 'ACTIVE'
+            AND e.approved = TRUE
           ORDER BY p.repo_name ASC
         `,
         [nodeId]

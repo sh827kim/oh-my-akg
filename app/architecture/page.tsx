@@ -66,6 +66,7 @@ async function getArchitectureData() {
             AND p_from.status = 'ACTIVE'
             AND p_to.visibility = 'VISIBLE'
             AND p_to.status = 'ACTIVE'
+            AND e.approved = TRUE
           ORDER BY e.id ASC
         `),
     ]);
