@@ -12,7 +12,7 @@ export interface RolledEdge {
 
 /**
  * Minimal materialized roll-up helper: dedupes relation edges by source/target/type.
- * Current app stores only rolled relations in `edges`, but this helper keeps roll-up logic centralized.
+ * Canonical relation storage uses `object_relations`; this helper keeps roll-up logic centralized.
  */
 export function materializeRollup(edges: EdgeLike[]): RolledEdge[] {
   const seen = new Set<string>();

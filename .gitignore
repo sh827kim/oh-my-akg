@@ -39,3 +39,4 @@ next-env.d.ts
 # PGlite database
 /data/**
 /local-only-docs
+**/node_modules

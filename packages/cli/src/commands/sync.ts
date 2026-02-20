@@ -1,10 +1,11 @@
 import { Command } from 'commander';
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fetchRepos } from '../utils/github';
-import { getDb } from '../../../core/src/db';
-import { buildDependencyUpsertPayload } from '../../../core/src/change-request-payloads';
-import { inferProjectType } from '../../../core/src/project-model';
-import { inferEnvMappingCandidates } from '../../../inference/src/env-auto-mapping';
+import { getDb } from '@archi-navi/core';
+import { buildDependencyUpsertPayload } from '@archi-navi/core';
+import { buildServiceMetadata, inferProjectType } from '@archi-navi/core';
+import { inferEnvMappingCandidates } from '@archi-navi/inference';
 
 export const syncCommand = new Command('sync')
   .description('Synchronize repositories and dependencies from GitHub')
@@ -30,42 +31,105 @@ export const syncCommand = new Command('sync')
       let queuedCount = 0;
       let autoQueuedCount = 0;
 
+      const validTypesRes = await db.query<{ name: string }>('SELECT name FROM project_types');
+      const validTypes = new Set(validTypesRes.rows.map((row) => row.name));
+      const normalizeType = (typeName: string) => (validTypes.has(typeName) ? typeName : 'unknown');
+
+      const seenUrns = new Set<string>();
+
       for (const repo of repos) {
-        const existing = await db.query('SELECT id FROM projects WHERE id = $1', [repo.id]);
+        seenUrns.add(repo.id);
+
+        const existing = await db.query<{ id: string; metadata: unknown }>(
+          `SELECT id, metadata
+           FROM objects
+           WHERE workspace_id = 'default'
+             AND object_type = 'service'
+             AND urn = $1`,
+          [repo.id],
+        );
+
+        const projectType = normalizeType(inferProjectType(repo.name, repo.language));
 
         if (existing.rows.length === 0) {
+          const metadata = buildServiceMetadata({
+            repoUrl: repo.url,
+            description: repo.description,
+            projectType,
+            status: 'ACTIVE',
+            lastSeenAt: new Date().toISOString(),
+          });
+
           await db.query(
-            `INSERT INTO projects (id, repo_name, repo_url, type, visibility, description, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [repo.id, repo.name, repo.url, inferProjectType(repo.name, repo.language), 'VISIBLE', repo.description, repo.updated_at]
+            `INSERT INTO objects
+             (id, workspace_id, object_type, name, display_name, urn, visibility, granularity, metadata)
+             VALUES ($1, 'default', 'service', $2, NULL, $3, 'VISIBLE', 'COMPOUND', $4::jsonb)`,
+            [randomUUID(), repo.name, repo.id, JSON.stringify(metadata)],
           );
           newCount++;
         } else {
+          const metadata = buildServiceMetadata({
+            existing: existing.rows[0].metadata,
+            repoUrl: repo.url,
+            description: repo.description,
+            projectType,
+            status: 'ACTIVE',
+            lastSeenAt: new Date().toISOString(),
+          });
+
           await db.query(
-            `UPDATE projects SET
-             repo_name = $2, repo_url = $3, description = $4, type = COALESCE(NULLIF(type, ''), $5), updated_at = $6, last_seen_at = CURRENT_TIMESTAMP
+            `UPDATE objects
+             SET name = $2,
+                 metadata = $3::jsonb,
+                 updated_at = CURRENT_TIMESTAMP
              WHERE id = $1`,
-            [repo.id, repo.name, repo.url, repo.description, inferProjectType(repo.name, repo.language), repo.updated_at]
+            [existing.rows[0].id, repo.name, JSON.stringify(metadata)],
           );
           updatedCount++;
         }
       }
 
+      const existingActive = await db.query<{ id: string; metadata: unknown; urn: string }>(
+        `SELECT id, metadata, urn
+         FROM objects
+         WHERE workspace_id = 'default'
+           AND object_type = 'service'
+           AND COALESCE(metadata->>'status', 'ACTIVE') = 'ACTIVE'
+           AND urn LIKE $1`,
+        [`${org}/%`],
+      );
+
+      for (const row of existingActive.rows) {
+        if (seenUrns.has(row.urn)) continue;
+
+        const metadata = buildServiceMetadata({
+          existing: row.metadata,
+          status: 'DELETED',
+          lastSeenAt: new Date().toISOString(),
+        });
+
+        await db.query(
+          `UPDATE objects
+           SET visibility = 'HIDDEN',
+               metadata = $2::jsonb,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+          [row.id, JSON.stringify(metadata)],
+        );
+      }
+
       const mappingPatternsResult = await db.query<{
         pattern: string;
-        target_project_id: string;
+        target_object_urn: string;
         dependency_type: string;
         enabled: boolean;
       }>(
-        `SELECT pattern, target_project_id, dependency_type, enabled
+        `SELECT pattern, target_object_urn, dependency_type, enabled
          FROM auto_mapping_patterns
-         WHERE enabled = TRUE`
+         WHERE enabled = TRUE`,
       );
 
-      const envMappingCandidates = await inferEnvMappingCandidates(
-        repos,
-        mappingPatternsResult.rows,
-      );
+      const envMappingCandidates = await inferEnvMappingCandidates(repos, mappingPatternsResult.rows);
 
       for (const candidate of envMappingCandidates) {
         const payload = buildDependencyUpsertPayload({
@@ -77,30 +141,36 @@ export const syncCommand = new Command('sync')
 
         const dedupe = await db.query(
           `SELECT id FROM change_requests
-           WHERE status = 'PENDING'
-             AND change_type = 'DEPENDENCY_UPSERT'
+           WHERE workspace_id = 'default'
+             AND status = 'PENDING'
+             AND request_type = 'RELATION_UPSERT'
              AND payload @> $1::jsonb
            LIMIT 1`,
-          [JSON.stringify({ fromId: payload.fromId, toId: payload.toId, type: payload.type })]
+          [JSON.stringify({ fromId: payload.fromId, toId: payload.toId, type: payload.type })],
         );
 
         if (dedupe.rows.length > 0) continue;
 
-        const edgeExists = await db.query(
-          `SELECT id FROM edges
-           WHERE from_id = $1
-             AND to_id = $2
-             AND type = $3
+        const relationExists = await db.query(
+          `SELECT r.id
+           FROM object_relations r
+           JOIN objects s ON s.id = r.subject_object_id
+           JOIN objects t ON t.id = r.target_object_id
+           WHERE r.workspace_id = 'default'
+             AND r.is_derived = FALSE
+             AND s.urn = $1
+             AND t.urn = $2
+             AND r.relation_type = $3
            LIMIT 1`,
-          [payload.fromId, payload.toId, payload.type]
+          [payload.fromId, payload.toId, payload.type],
         );
 
-        if (edgeExists.rows.length > 0) continue;
+        if (relationExists.rows.length > 0) continue;
 
         await db.query(
-          `INSERT INTO change_requests (project_id, change_type, payload, status)
-           VALUES ($1, 'DEPENDENCY_UPSERT', $2::jsonb, 'PENDING')`,
-          [payload.fromId, JSON.stringify(payload)]
+          `INSERT INTO change_requests (workspace_id, request_type, payload, status, requested_by)
+           VALUES ('default', 'RELATION_UPSERT', $1::jsonb, 'PENDING', $2)`,
+          [JSON.stringify(payload), payload.fromId],
         );
         autoQueuedCount++;
       }
@@ -123,19 +193,20 @@ export const syncCommand = new Command('sync')
 
             const dedupe = await db.query(
               `SELECT id FROM change_requests
-               WHERE status = 'PENDING'
-                 AND change_type = 'DEPENDENCY_UPSERT'
+               WHERE workspace_id = 'default'
+                 AND status = 'PENDING'
+                 AND request_type = 'RELATION_UPSERT'
                  AND payload @> $1::jsonb
                LIMIT 1`,
-              [JSON.stringify({ fromId: payload.fromId, toId: payload.toId, type: payload.type })]
+              [JSON.stringify({ fromId: payload.fromId, toId: payload.toId, type: payload.type })],
             );
 
             if (dedupe.rows.length > 0) continue;
 
             await db.query(
-              `INSERT INTO change_requests (project_id, change_type, payload, status)
-               VALUES ($1, 'DEPENDENCY_UPSERT', $2::jsonb, 'PENDING')`,
-              [payload.fromId, JSON.stringify(payload)]
+              `INSERT INTO change_requests (workspace_id, request_type, payload, status, requested_by)
+               VALUES ('default', 'RELATION_UPSERT', $1::jsonb, 'PENDING', $2)`,
+              [JSON.stringify(payload), payload.fromId],
             );
             queuedCount++;
           }

@@ -4,6 +4,7 @@
 기준 문서:
 - PRD: `docs/prd/PRD.md`
 - 구현 스펙: `docs/spec/2026-02-20_implementation-spec-core-api.md`
+- 스키마 롤아웃/롤백: `docs/spec/2026-02-20_schema-rollout-rollback-strategy.md`
 - AST 고도화 스펙: `docs/spec/2026-02-20_ast-inference-pipeline-plan.md`
 
 ---
@@ -86,9 +87,9 @@
 ## Task 1 세부 Task (Core 모델 전환)
 
 ### 1-1. 스키마 정렬
-- [ ] `objects`, `object_relations`, `object_tags`, `change_requests` 최종 스키마 확인/보강
-- [ ] 인덱스/유니크/FK 제약을 스펙 기준으로 고정
-- [ ] 롤백 가능한 마이그레이션 전략 확정
+- [x] `objects`, `object_relations`, `object_tags`, `change_requests` 최종 스키마 확인/보강
+- [x] 인덱스/유니크/FK 제약을 스펙 기준으로 고정
+- [x] 롤백 가능한 마이그레이션 전략 확정
 
 ### 1-2. 데이터 백필
 - [ ] 기존 `projects/edges/tags` -> 신규 모델 매핑 테이블 정의

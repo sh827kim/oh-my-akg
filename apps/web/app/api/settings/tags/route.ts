@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { getDb } from '@archi-navi/core';
 
 interface TagRow {
     id: number;
@@ -14,6 +14,7 @@ export async function GET() {
             `
               SELECT id, name, color_hex
               FROM tags
+              WHERE workspace_id = 'default'
               ORDER BY name ASC
             `
         );
@@ -45,10 +46,10 @@ export async function POST(req: NextRequest) {
 
         const result = await db.query<TagRow>(
             `
-              INSERT INTO tags (name, color_hex)
-              VALUES ($1, $2)
-              ON CONFLICT (name)
-              DO UPDATE SET color_hex = EXCLUDED.color_hex
+              INSERT INTO tags (workspace_id, name, color_hex)
+              VALUES ('default', $1, $2)
+              ON CONFLICT (workspace_id, name)
+              DO UPDATE SET color_hex = EXCLUDED.color_hex, updated_at = CURRENT_TIMESTAMP
               RETURNING id, name, color_hex
             `,
             [name, color]

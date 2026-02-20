@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "Inference pipeline and AST plugins",
+  "dependencies": {
+    "@archi-navi/config": "workspace:*"
+  },
   "main": "src/index.ts",
   "types": "src/index.ts"
 }

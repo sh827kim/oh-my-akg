@@ -1,17 +1,23 @@
+import { randomUUID } from 'node:crypto';
+
 export type ChangeRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type ChangeRequestType = 'RELATION_UPSERT' | 'RELATION_DELETE' | 'OBJECT_PATCH';
 
 import {
   isDependencyUpsertPayload,
+  normalizeRelationType,
   type DependencyUpsertPayload,
 } from './change-request-payloads';
 
 interface ChangeRequestRow {
   id: number;
-  project_id: string | null;
-  change_type: string;
+  request_type: ChangeRequestType;
   payload: unknown;
   status: ChangeRequestStatus;
+  requested_by: string | null;
+  reviewed_by: string | null;
   created_at?: string;
+  reviewed_at?: string | null;
 }
 
 interface DbLike {
@@ -22,18 +28,32 @@ function asDependencyPayload(payload: unknown): DependencyUpsertPayload | null {
   return isDependencyUpsertPayload(payload) ? payload : null;
 }
 
+async function resolveServiceObjectId(db: DbLike, urn: string): Promise<string | null> {
+  const result = await db.query<{ id: string }>(
+    `SELECT id
+     FROM objects
+     WHERE workspace_id = 'default'
+       AND object_type = 'service'
+       AND urn = $1
+     LIMIT 1`,
+    [urn],
+  );
+  return result.rows[0]?.id ?? null;
+}
+
 export async function listChangeRequests(
   db: DbLike,
   status: ChangeRequestStatus = 'PENDING',
   limit = 200,
 ): Promise<ChangeRequestRow[]> {
   const result = await db.query<ChangeRequestRow>(
-    `SELECT id, project_id, change_type, payload, status, created_at
+    `SELECT id, request_type, payload, status, requested_by, reviewed_by, created_at, reviewed_at
      FROM change_requests
-     WHERE status = $1
+     WHERE workspace_id = 'default'
+       AND status = $1
      ORDER BY created_at ASC, id ASC
      LIMIT $2`,
-    [status, limit]
+    [status, limit],
   );
 
   return result.rows;
@@ -45,10 +65,11 @@ export async function applyChangeRequest(
   nextStatus: Extract<ChangeRequestStatus, 'APPROVED' | 'REJECTED'>,
 ): Promise<{ id: number; status: ChangeRequestStatus }> {
   const crResult = await db.query<ChangeRequestRow>(
-    `SELECT id, project_id, change_type, payload, status
+    `SELECT id, request_type, payload, status, requested_by, reviewed_by
      FROM change_requests
-     WHERE id = $1`,
-    [id]
+     WHERE id = $1
+       AND workspace_id = 'default'`,
+    [id],
   );
 
   const cr = crResult.rows[0];
@@ -64,35 +85,64 @@ export async function applyChangeRequest(
   try {
     if (nextStatus === 'APPROVED') {
       const dependencyPayload = asDependencyPayload(cr.payload);
-      const fromId = dependencyPayload?.fromId;
-      const toId = dependencyPayload?.toId;
-      const edgeType = dependencyPayload?.type ?? 'unknown';
+      const fromUrn = dependencyPayload?.fromId;
+      const toUrn = dependencyPayload?.toId;
+      const relationType = normalizeRelationType(dependencyPayload?.type);
 
-      if (cr.change_type === 'DEPENDENCY_UPSERT' && fromId && toId) {
-        await db.query(
-          `INSERT INTO edges (from_id, to_id, type, approved, is_derived)
-           VALUES ($1, $2, $3, TRUE, FALSE)
-           ON CONFLICT (from_id, to_id, type)
-           DO UPDATE SET approved = TRUE, is_derived = FALSE`,
-          [fromId, toId, edgeType]
-        );
-      }
+      if ((cr.request_type === 'RELATION_UPSERT' || cr.request_type === 'RELATION_DELETE') && fromUrn && toUrn) {
+        const [subjectObjectId, targetObjectId] = await Promise.all([
+          resolveServiceObjectId(db, fromUrn),
+          resolveServiceObjectId(db, toUrn),
+        ]);
 
-      if (cr.change_type === 'DEPENDENCY_DELETE' && fromId && toId) {
-        await db.query(
-          `DELETE FROM edges
-           WHERE from_id = $1 AND to_id = $2 AND type = $3`,
-          [fromId, toId, edgeType]
-        );
+        if (!subjectObjectId || !targetObjectId) {
+          throw new Error('REQUEST_OBJECT_NOT_FOUND');
+        }
+
+        if (cr.request_type === 'RELATION_UPSERT') {
+          const evidenceJson = JSON.stringify(
+            dependencyPayload?.evidence
+              ? [{ kind: 'inference', value: dependencyPayload.evidence }]
+              : [],
+          );
+
+          await db.query(
+            `INSERT INTO object_relations
+             (id, workspace_id, subject_object_id, relation_type, target_object_id, approved, is_derived, source, evidence)
+             VALUES ($1, 'default', $2, $3, $4, TRUE, FALSE, 'inference', $5::jsonb)
+             ON CONFLICT (workspace_id, subject_object_id, relation_type, target_object_id, is_derived)
+             DO UPDATE SET approved = TRUE,
+                           is_derived = FALSE,
+                           source = EXCLUDED.source,
+                           evidence = EXCLUDED.evidence,
+                           updated_at = CURRENT_TIMESTAMP`,
+            [randomUUID(), subjectObjectId, relationType, targetObjectId, evidenceJson],
+          );
+        }
+
+        if (cr.request_type === 'RELATION_DELETE') {
+          await db.query(
+            `DELETE FROM object_relations
+             WHERE workspace_id = 'default'
+               AND subject_object_id = $1
+               AND target_object_id = $2
+               AND relation_type = $3
+               AND is_derived = FALSE`,
+            [subjectObjectId, targetObjectId, relationType],
+          );
+        }
       }
     }
 
     const updated = await db.query<{ id: number; status: ChangeRequestStatus }>(
       `UPDATE change_requests
-       SET status = $2
+       SET status = $2,
+           reviewed_by = COALESCE(reviewed_by, 'system'),
+           reviewed_at = CURRENT_TIMESTAMP
        WHERE id = $1
+         AND workspace_id = 'default'
        RETURNING id, status`,
-      [id, nextStatus]
+      [id, nextStatus],
     );
 
     await db.query('COMMIT');
@@ -134,7 +184,10 @@ export async function listPendingIds(
 ): Promise<number[]> {
   if (excludeIds.length === 0) {
     const result = await db.query<{ id: number }>(
-      `SELECT id FROM change_requests WHERE status = 'PENDING' ORDER BY id ASC`
+      `SELECT id FROM change_requests
+       WHERE workspace_id = 'default'
+         AND status = 'PENDING'
+       ORDER BY id ASC`,
     );
     return result.rows.map((row) => row.id);
   }
@@ -142,7 +195,8 @@ export async function listPendingIds(
   const placeholders = excludeIds.map((_, idx) => `$${idx + 1}`).join(', ');
   const result = await db.query<{ id: number }>(
     `SELECT id FROM change_requests
-     WHERE status = 'PENDING'
+     WHERE workspace_id = 'default'
+       AND status = 'PENDING'
        AND id NOT IN (${placeholders})
      ORDER BY id ASC`,
     excludeIds,

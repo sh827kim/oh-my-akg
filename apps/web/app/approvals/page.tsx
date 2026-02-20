@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 
 type ChangeRequest = {
     id: number;
-    project_id: string | null;
-    change_type: string;
+    request_type: string;
     payload: Record<string, unknown>;
     status: string;
+    requested_by?: string | null;
     created_at: string;
 };
 
@@ -99,7 +99,9 @@ export default function ApprovalsPage() {
                                 onChange={() => toggleSelect(item.id)}
                                 disabled={processing}
                             />
-                            <p className="text-sm text-gray-400">#{item.id} · {item.change_type}</p>
+                            <p className="text-sm text-gray-400">
+                                #{item.id} · {item.request_type} · by {item.requested_by ?? '-'}
+                            </p>
                         </div>
                         <pre className="mt-2 overflow-auto rounded bg-black/40 p-2 text-xs text-gray-300">{JSON.stringify(item.payload, null, 2)}</pre>
                     </div>

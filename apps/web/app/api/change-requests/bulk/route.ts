@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
-import { applyBulkChangeRequests, listPendingIds } from '@/packages/core/src/change-requests';
+import { getDb } from '@archi-navi/core';
+import { applyBulkChangeRequests, listPendingIds } from '@archi-navi/core';
 
 export async function POST(req: NextRequest) {
   try {
