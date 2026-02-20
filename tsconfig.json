@@ -10,7 +10,6 @@
   },
   "include": [
     "packages/**/*.ts",
-    "cli/**/*.ts",
     "lib/**/*.ts",
     "scripts/**/*.ts",
     "reproduce_db_error.ts"

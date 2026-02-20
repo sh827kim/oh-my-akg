@@ -18,8 +18,8 @@
 
 참고 파일:
 - `package.json`
-- `cli/index.ts`
-- `cli/commands/sync.ts`
+- `packages/cli/src/index.ts`
+- `packages/cli/src/commands/sync.ts`
 - `lib/db.ts`
 
 ---
