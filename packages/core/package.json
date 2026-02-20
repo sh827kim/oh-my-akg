@@ -1,0 +1,8 @@
+{
+  "name": "@archi-navi/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Core object/relation model and roll-up logic",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+:root {
+  /* Premium Cosmic Theme Palette */
+  --background: #050508; /* Deep Space Black */
+  --foreground: #fafafa;
+  
+  --card: #0f1014;
+  --card-foreground: #fafafa;
+
+  --popover: #050508;
+  --popover-foreground: #fafafa;
+
+  --primary: #8b5cf6;    /* Vivid Violet */
+  --primary-foreground: #ffffff;
+
+  --secondary: #06b6d4;  /* Cyan Neon */
+  --secondary-foreground: #0a0a0a;
+
+  --muted: #1a1b26;
+  --muted-foreground: #a1a1aa;
+
+  --accent: #1e1e2e;
+  --accent-foreground: #fafafa;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #d4d4d8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  
+  --font-sans: "Segoe UI", "Noto Sans KR", Helvetica, Arial, sans-serif;
+  --font-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.15) 0%, transparent 60%),
+    radial-gradient(circle at 100% 0%, rgba(6, 182, 212, 0.1) 0%, transparent 50%);
+  background-attachment: fixed;
+}
+
+/* Custom Utilities */
+.glass-panel {
+  @apply bg-black/40 backdrop-blur-xl border border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.1)];
+}
+
+.glass-card {
+  @apply bg-white/5 backdrop-blur-md border border-white/5 hover:border-white/10 transition-all duration-300;
+}
+
+.text-glow {
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
+}

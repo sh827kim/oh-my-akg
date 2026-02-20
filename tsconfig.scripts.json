@@ -11,7 +11,10 @@
     "include": [
         "scripts/**/*",
         "cli/**/*",
-        "lib/**/*"
+        "lib/**/*",
+        "packages/core/src/**/*",
+        "packages/inference/src/**/*",
+        "packages/cli/src/**/*"
     ],
     "exclude": [
         "node_modules"

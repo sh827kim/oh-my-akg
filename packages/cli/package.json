@@ -1,0 +1,12 @@
+{
+  "name": "@archi-navi/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Archi.Navi CLI",
+  "bin": {
+    "archi-navi": "./bin/archi-navi.js"
+  },
+  "scripts": {
+    "dev": "ts-node -P ./tsconfig.json ./src/index.ts"
+  }
+}

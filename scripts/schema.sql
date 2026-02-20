@@ -151,3 +151,36 @@ END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS edges_unique_triplet_idx
   ON edges (from_id, to_id, type);
+
+ALTER TABLE projects
+  ADD COLUMN IF NOT EXISTS workspace_id TEXT DEFAULT 'default';
+
+ALTER TABLE edges
+  ADD COLUMN IF NOT EXISTS workspace_id TEXT DEFAULT 'default';
+
+ALTER TABLE edges
+  ADD COLUMN IF NOT EXISTS is_derived BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE edges
+  ADD COLUMN IF NOT EXISTS derived_from_edge_id INTEGER;
+
+ALTER TABLE edges
+  ADD COLUMN IF NOT EXISTS confidence NUMERIC(4,3);
+
+ALTER TABLE change_requests
+  ADD COLUMN IF NOT EXISTS workspace_id TEXT DEFAULT 'default';
+
+ALTER TABLE tags
+  ADD COLUMN IF NOT EXISTS workspace_id TEXT DEFAULT 'default';
+
+ALTER TABLE project_tags
+  ADD COLUMN IF NOT EXISTS workspace_id TEXT DEFAULT 'default';
+
+CREATE INDEX IF NOT EXISTS edges_workspace_approved_idx
+  ON edges (workspace_id, approved);
+
+CREATE INDEX IF NOT EXISTS edges_workspace_derived_idx
+  ON edges (workspace_id, is_derived);
+
+CREATE INDEX IF NOT EXISTS change_requests_workspace_status_idx
+  ON change_requests (workspace_id, status);
