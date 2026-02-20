@@ -1,0 +1,12 @@
+{
+  "name": "@archi-navi/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Archi.Navi web application workspace",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "eslint ."
+  }
+}

@@ -1,13 +1,48 @@
 {
-  "name": "oh-my-akg",
+  "name": "archi-navi",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
+  "bin": {
+    "archi-navi": "packages/cli/bin/archi-navi.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "apps/README.md",
+    "apps/web/app",
+    "apps/web/components",
+    "apps/web/public",
+    "apps/web/package.json",
+    "apps/web/next.config.ts",
+    "apps/web/postcss.config.mjs",
+    "apps/web/eslint.config.mjs",
+    "apps/web/tsconfig.json",
+    "apps/web/next-env.d.ts",
+    "packages",
+    "scripts",
+    "lib",
+    "cli",
+    "LICENSE",
+    "README.md",
+    "README.ko.md",
+    "tsconfig.json",
+    "tsconfig.scripts.json",
+    "pnpm-workspace.yaml"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "cli": "ts-node -P tsconfig.scripts.json cli/index.ts"
+    "dev": "pnpm --filter @archi-navi/web dev",
+    "dev:web": "pnpm --filter @archi-navi/web dev",
+    "build": "pnpm --filter @archi-navi/web build",
+    "build:web": "pnpm --filter @archi-navi/web build",
+    "start": "pnpm --filter @archi-navi/web start",
+    "start:web": "pnpm --filter @archi-navi/web start",
+    "lint": "pnpm --filter @archi-navi/web lint",
+    "lint:web": "pnpm --filter @archi-navi/web lint",
+    "cli": "pnpm --filter @archi-navi/cli dev",
+    "cli:pkg": "pnpm --filter @archi-navi/cli dev",
+    "ws:list": "pnpm -r list --depth -1",
+    "pack:check": "npm_config_cache=.npm-cache npm pack --dry-run"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.3.15",
@@ -36,6 +71,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "sonner": "^2.0.7",
+    "ts-node": "^10.9.2",
     "tailwind-merge": "^3.5.0",
     "use-debounce": "^10.1.0"
   },
@@ -47,7 +83,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
-    "ts-node": "^10.9.2",
     "typescript": "^5"
   }
 }

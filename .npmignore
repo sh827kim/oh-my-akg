@@ -1,0 +1,7 @@
+**/.next
+**/node_modules
+**/*.tsbuildinfo
+.npm-cache
+data/akg-db
+*.tgz
+local-only-docs
