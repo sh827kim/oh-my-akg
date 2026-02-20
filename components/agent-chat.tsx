@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { MessageCircle, Send, X, Bot, User } from 'lucide-react';
+import { MessageCircle, Send, X, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils'; // Assumes you have this
 
 interface Message {

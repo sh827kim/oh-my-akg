@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Command } from 'cmdk';
-import { Search, Monitor, Server, Database, Boxes, Layout } from 'lucide-react';
+import { Search, Monitor, Server, Database, Boxes } from 'lucide-react';
 
 interface Project {
     id: string;
@@ -37,12 +37,6 @@ export function CommandPalette() {
         }
     }, [open]);
 
-    const handleSelect = (projectId: string) => {
-        setOpen(false);
-        // Navigate to list view with search filter or open modal?
-        // For now, let's just log or set the query param
-        router.push(`/?q=${encodeURIComponent(projectId)}`);
-    };
 
     if (!open) return null;
 

@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { readFile } from 'node:fs/promises';
 import { fetchRepos } from '../utils/github';
 import { getDb } from '../../lib/db';
+import { inferEnvMappingCandidates } from '../../lib/env-auto-mapping';
 
 export const syncCommand = new Command('sync')
     .description('Synchronize repositories and dependencies from GitHub')
@@ -25,6 +26,7 @@ export const syncCommand = new Command('sync')
             let newCount = 0;
             let updatedCount = 0;
             let queuedCount = 0;
+            let autoQueuedCount = 0;
 
             for (const repo of repos) {
                 const existing = await db.query('SELECT id FROM projects WHERE id = $1', [repo.id]);
@@ -45,6 +47,57 @@ export const syncCommand = new Command('sync')
                     );
                     updatedCount++;
                 }
+            }
+
+            const mappingPatternsResult = await db.query<{
+                pattern: string;
+                target_project_id: string;
+                dependency_type: string;
+                enabled: boolean;
+            }>(
+                `SELECT pattern, target_project_id, dependency_type, enabled
+                 FROM auto_mapping_patterns
+                 WHERE enabled = TRUE`
+            );
+
+            const envMappingCandidates = await inferEnvMappingCandidates(
+                repos,
+                mappingPatternsResult.rows,
+            );
+
+            for (const candidate of envMappingCandidates) {
+                const fromId = candidate.fromId;
+                const toId = candidate.toId;
+                const type = candidate.type || 'unknown';
+
+                const dedupe = await db.query(
+                    `SELECT id FROM change_requests
+                     WHERE status = 'PENDING'
+                       AND change_type = 'DEPENDENCY_UPSERT'
+                       AND payload @> $1::jsonb
+                     LIMIT 1`,
+                    [JSON.stringify({ fromId, toId, type })]
+                );
+
+                if (dedupe.rows.length > 0) continue;
+
+                const edgeExists = await db.query(
+                    `SELECT id FROM edges
+                     WHERE from_id = $1
+                       AND to_id = $2
+                       AND type = $3
+                     LIMIT 1`,
+                    [fromId, toId, type]
+                );
+
+                if (edgeExists.rows.length > 0) continue;
+
+                await db.query(
+                    `INSERT INTO change_requests (project_id, change_type, payload, status)
+                     VALUES ($1, 'DEPENDENCY_UPSERT', $2::jsonb, 'PENDING')`,
+                    [fromId, JSON.stringify({ fromId, toId, type, evidence: candidate.evidence })]
+                );
+                autoQueuedCount++;
             }
 
             if (options.depsFile) {
@@ -79,7 +132,7 @@ export const syncCommand = new Command('sync')
                 }
             }
 
-            console.log(`Sync complete. New: ${newCount}, Updated: ${updatedCount}, Queued: ${queuedCount}`);
+            console.log(`Sync complete. New: ${newCount}, Updated: ${updatedCount}, AutoQueued: ${autoQueuedCount}, Queued: ${queuedCount}`);
         } catch (error) {
             console.error('Sync failed:', error);
             process.exit(1);

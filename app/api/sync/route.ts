@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { fetchRepos, type RepoInfo } from '@/cli/utils/github';
+import { inferEnvMappingCandidates } from '@/lib/env-auto-mapping';
 
 function inferType(repo: RepoInfo) {
     const name = repo.name.toLowerCase();
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
         let updated = 0;
         let deleted = 0;
         let changeRequestsCreated = 0;
+        let autoMappingApprovalsCreated = 0;
 
         const seenIds = new Set<string>();
         for (const repo of repos) {
@@ -117,6 +119,56 @@ export async function POST(req: NextRequest) {
             deleted++;
         }
 
+        const mappingPatternsResult = await db.query<{
+            pattern: string;
+            target_project_id: string;
+            dependency_type: string;
+            enabled: boolean;
+        }>(
+            `SELECT pattern, target_project_id, dependency_type, enabled
+             FROM auto_mapping_patterns
+             WHERE enabled = TRUE`
+        );
+
+        const envMappingCandidates = await inferEnvMappingCandidates(
+            repos,
+            mappingPatternsResult.rows,
+        );
+
+        for (const candidate of envMappingCandidates) {
+            const fromId = candidate.fromId;
+            const toId = candidate.toId;
+            const type = candidate.type || 'unknown';
+
+            const dedupe = await db.query<{ id: number }>(
+                `SELECT id FROM change_requests
+                 WHERE status = 'PENDING'
+                   AND change_type = 'DEPENDENCY_UPSERT'
+                   AND payload @> $1::jsonb
+                 LIMIT 1`,
+                [JSON.stringify({ fromId, toId, type })]
+            );
+
+            if (dedupe.rows.length > 0) continue;
+
+            const edgeExists = await db.query<{ id: number }>(
+                `SELECT id FROM edges
+                 WHERE from_id = $1
+                   AND to_id = $2
+                   AND type = $3
+                 LIMIT 1`,
+                [fromId, toId, type]
+            );
+
+            if (edgeExists.rows.length > 0) continue;
+
+            await db.query(
+                `INSERT INTO change_requests (project_id, change_type, payload, status)
+                 VALUES ($1, 'DEPENDENCY_UPSERT', $2::jsonb, 'PENDING')`,
+                [fromId, JSON.stringify({ fromId, toId, type, evidence: candidate.evidence })]
+            );
+            autoMappingApprovalsCreated++;
+        }
 
         for (const candidate of dependencyCandidates) {
             const fromId = typeof candidate?.fromId === 'string' ? candidate.fromId : null;
@@ -150,6 +202,7 @@ export async function POST(req: NextRequest) {
             updated,
             deleted,
             changeRequestsCreated,
+            autoMappingApprovalsCreated,
             total: repos.length,
         });
     } catch (error) {

@@ -52,17 +52,13 @@ function getTypeClass(type: string) {
 }
 
 export function ProjectDetailModal({ project, isOpen, onClose, tags }: ProjectDetailModalProps) {
-    const [dependencies, setDependencies] = useState<DependenciesResponse>({ inbound: [], outbound: [] });
-    const [loadingDeps, setLoadingDeps] = useState(false);
-    const [depsError, setDepsError] = useState<string | null>(null);
+    const [dependenciesByProject, setDependenciesByProject] = useState<Record<string, DependenciesResponse>>({});
+    const [depsErrorsByProject, setDepsErrorsByProject] = useState<Record<string, string>>({});
 
     useEffect(() => {
         if (!project || !isOpen) return;
 
         let cancelled = false;
-        setLoadingDeps(true);
-        setDepsError(null);
-
         fetch(`/api/projects/${encodeURIComponent(project.id)}/dependencies`)
             .then(async (res) => {
                 const json = (await res.json()) as DependenciesResponse | { error?: string };
@@ -70,17 +66,21 @@ export function ProjectDetailModal({ project, isOpen, onClose, tags }: ProjectDe
                     throw new Error('error' in json ? json.error : 'Failed to load dependencies');
                 }
                 if (!cancelled) {
-                    setDependencies(json as DependenciesResponse);
+                    setDependenciesByProject((prev) => ({ ...prev, [project.id]: json as DependenciesResponse }));
+                    setDepsErrorsByProject((prev) => {
+                        const next = { ...prev };
+                        delete next[project.id];
+                        return next;
+                    });
                 }
             })
             .catch((error) => {
                 if (!cancelled) {
-                    setDependencies({ inbound: [], outbound: [] });
-                    setDepsError(error instanceof Error ? error.message : 'Failed to load dependencies');
+                    setDepsErrorsByProject((prev) => ({
+                        ...prev,
+                        [project.id]: error instanceof Error ? error.message : 'Failed to load dependencies',
+                    }));
                 }
-            })
-            .finally(() => {
-                if (!cancelled) setLoadingDeps(false);
             });
 
         return () => {
@@ -90,7 +90,10 @@ export function ProjectDetailModal({ project, isOpen, onClose, tags }: ProjectDe
 
     if (!project) return null;
 
-    const hasLoadedDeps = !loadingDeps && !depsError;
+    const dependencies = dependenciesByProject[project.id] ?? { inbound: [], outbound: [] };
+    const depsError = depsErrorsByProject[project.id] ?? null;
+    const loadingDeps = isOpen && !dependenciesByProject[project.id] && !depsError;
+    const hasLoadedDeps = Boolean(dependenciesByProject[project.id] && !depsError);
     const inboundCount = hasLoadedDeps ? dependencies.inbound.length : project.inbound_count;
     const outboundCount = hasLoadedDeps ? dependencies.outbound.length : project.outbound_count;
 
@@ -166,8 +169,8 @@ export function ProjectDetailModal({ project, isOpen, onClose, tags }: ProjectDe
                                         <TagManager
                                             tags={tags}
                                             isEditMode={false}
-                                            onAddTag={(_tagId) => { }}
-                                            onRemoveTag={(_tagId) => { }}
+                                            onAddTag={() => { }}
+                                            onRemoveTag={() => { }}
                                         />
                                         {tags.length === 0 && <span className="text-sm italic text-gray-500">No tags assigned</span>}
                                     </div>
