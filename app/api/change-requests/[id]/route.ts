@@ -18,6 +18,8 @@ interface ChangeRequestRow {
 }
 
 export async function PATCH(req: NextRequest, context: ParamsContext) {
+    const db = await getDb();
+
     try {
         const { id } = await context.params;
         const body = await req.json();
@@ -27,23 +29,28 @@ export async function PATCH(req: NextRequest, context: ParamsContext) {
             return NextResponse.json({ error: 'status must be APPROVED or REJECTED' }, { status: 400 });
         }
 
-        const db = await getDb();
-        const crResult = await db.query<ChangeRequestRow>(
-            `SELECT id, project_id, change_type, payload, status
-             FROM change_requests
-             WHERE id = $1`,
-            [id]
+        await db.query('BEGIN');
+
+        const transitioned = await db.query<ChangeRequestRow>(
+            `UPDATE change_requests
+             SET status = $2
+             WHERE id = $1 AND status = 'PENDING'
+             RETURNING id, project_id, change_type, payload, status`,
+            [id, nextStatus]
         );
 
-        const cr = crResult.rows[0];
+        const cr = transitioned.rows[0];
+
         if (!cr) {
-            return NextResponse.json({ error: 'change request not found' }, { status: 404 });
-        }
-        if (cr.status !== 'PENDING') {
+            const exists = await db.query('SELECT 1 FROM change_requests WHERE id = $1', [id]);
+            await db.query('ROLLBACK');
+
+            if (exists.rowCount === 0) {
+                return NextResponse.json({ error: 'change request not found' }, { status: 404 });
+            }
+
             return NextResponse.json({ error: 'change request is already processed' }, { status: 409 });
         }
-
-        await db.query('BEGIN');
 
         if (nextStatus === 'APPROVED') {
             const fromId = cr.payload?.fromId;
@@ -69,20 +76,11 @@ export async function PATCH(req: NextRequest, context: ParamsContext) {
             }
         }
 
-        const updated = await db.query(
-            `UPDATE change_requests
-             SET status = $2
-             WHERE id = $1
-             RETURNING id, status`,
-            [id, nextStatus]
-        );
-
         await db.query('COMMIT');
 
-        return NextResponse.json({ item: updated.rows[0] });
+        return NextResponse.json({ item: { id: cr.id, status: cr.status } });
     } catch (error) {
-        const db = await getDb();
-        await db.query('ROLLBACK');
+        await db.query('ROLLBACK').catch(() => undefined);
         console.error('Failed to process change request:', error);
         return NextResponse.json({ error: 'Failed to process change request' }, { status: 500 });
     }
