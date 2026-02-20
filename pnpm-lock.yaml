@@ -89,6 +89,9 @@ importers:
       tailwind-merge:
         specifier: ^3.5.0
         version: 3.5.0
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@20.19.33)(typescript@5.9.3)
       use-debounce:
         specifier: ^10.1.0
         version: 10.1.0(react@19.2.3)
@@ -114,12 +117,43 @@ importers:
       tailwindcss:
         specifier: ^4
         version: 4.2.0
-      ts-node:
-        specifier: ^10.9.2
-        version: 10.9.2(@types/node@20.19.33)(typescript@5.9.3)
       typescript:
         specifier: ^5
         version: 5.9.3
+
+  apps/web:
+    dependencies:
+      '@archi-navi/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@archi-navi/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@archi-navi/inference':
+        specifier: workspace:*
+        version: link:../../packages/inference
+
+  packages/cli:
+    dependencies:
+      '@archi-navi/config':
+        specifier: workspace:*
+        version: link:../config
+      '@archi-navi/core':
+        specifier: workspace:*
+        version: link:../core
+      '@archi-navi/inference':
+        specifier: workspace:*
+        version: link:../inference
+
+  packages/config: {}
+
+  packages/core: {}
+
+  packages/inference:
+    dependencies:
+      '@archi-navi/config':
+        specifier: workspace:*
+        version: link:../config
 
 packages:
 

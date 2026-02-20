@@ -1,11 +1,11 @@
 import { Command } from 'commander';
-import { getDb } from '../../../core/src/db';
+import { getDb } from '@archi-navi/core';
 import {
   applyBulkChangeRequests,
   listChangeRequests,
   listPendingIds,
   type ChangeRequestStatus,
-} from '../../../core/src/change-requests';
+} from '@archi-navi/core';
 
 function parseIdList(raw: string | undefined): number[] {
   if (!raw) return [];
@@ -34,7 +34,7 @@ export const approvalsCommand = new Command('approvals')
         }
 
         for (const row of rows) {
-          console.log(`#${row.id} ${row.status} ${row.change_type} project=${row.project_id ?? '-'} payload=${JSON.stringify(row.payload)}`);
+          console.log(`#${row.id} ${row.status} ${row.request_type} by=${row.requested_by ?? '-'} payload=${JSON.stringify(row.payload)}`);
         }
       })
   )

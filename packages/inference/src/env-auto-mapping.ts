@@ -1,5 +1,5 @@
 import type { Octokit } from 'octokit';
-import { getOctokit, type RepoInfo } from '../../config/src/github';
+import { getOctokit, type RepoInfo } from '@archi-navi/config';
 import { extractSignalsWithPlugins } from './plugins';
 
 export interface MappingCandidate {
@@ -11,7 +11,7 @@ export interface MappingCandidate {
 
 interface PatternRow {
     pattern: string;
-    target_project_id: string;
+    target_object_urn: string;
     dependency_type: string;
     enabled: boolean;
 }
@@ -191,15 +191,15 @@ export async function inferEnvMappingCandidates(
             }
 
             for (const pattern of patterns) {
-                if (!pattern.enabled || !pattern.pattern || !pattern.target_project_id) continue;
+                if (!pattern.enabled || !pattern.pattern || !pattern.target_object_urn) continue;
                 if (!content.includes(pattern.pattern)) continue;
 
-                const dedupeKey = `${repoInfo.id}|${pattern.target_project_id}|${pattern.dependency_type}`;
+                const dedupeKey = `${repoInfo.id}|${pattern.target_object_urn}|${pattern.dependency_type}`;
                 if (!candidates.has(dedupeKey)) {
                     candidates.set(dedupeKey, {
                         fromId: repoInfo.id,
-                        toId: pattern.target_project_id,
-                        type: pattern.dependency_type || 'unknown',
+                        toId: pattern.target_object_urn,
+                        type: pattern.dependency_type || 'depend_on',
                         evidence: `${configPath}:pattern:${pattern.pattern}`,
                     });
                 }

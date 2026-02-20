@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "ES2017",
     "lib": ["dom", "dom.iterable", "esnext"],
+    "baseUrl": ".",
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -19,7 +20,13 @@
       }
     ],
     "paths": {
-      "@/*": ["./*", "../../*"]
+      "@/*": ["./*", "../../*"],
+      "@archi-navi/core": ["../../packages/core/src/index.ts"],
+      "@archi-navi/core/*": ["../../packages/core/src/*"],
+      "@archi-navi/config": ["../../packages/config/src/index.ts"],
+      "@archi-navi/config/*": ["../../packages/config/src/*"],
+      "@archi-navi/inference": ["../../packages/inference/src/index.ts"],
+      "@archi-navi/inference/*": ["../../packages/inference/src/*"]
     }
   },
   "include": [

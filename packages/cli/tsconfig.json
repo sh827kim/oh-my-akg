@@ -6,7 +6,15 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "strict": true,
-    "baseUrl": "../.."
+    "baseUrl": "../..",
+    "paths": {
+      "@archi-navi/core": ["packages/core/src/index.ts"],
+      "@archi-navi/core/*": ["packages/core/src/*"],
+      "@archi-navi/config": ["packages/config/src/index.ts"],
+      "@archi-navi/config/*": ["packages/config/src/*"],
+      "@archi-navi/inference": ["packages/inference/src/index.ts"],
+      "@archi-navi/inference/*": ["packages/inference/src/*"]
+    }
   },
   "include": [
     "src/**/*",

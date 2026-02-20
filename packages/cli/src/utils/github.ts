@@ -1,1 +1,1 @@
-export * from '../../../config/src/github';
+export * from '@archi-navi/config';

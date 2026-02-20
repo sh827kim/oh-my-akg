@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { getDb } from '@archi-navi/core';
 
 interface ParamsContext {
     params: Promise<{ id: string }>;
@@ -102,7 +102,20 @@ export async function DELETE(_: NextRequest, context: ParamsContext) {
             return NextResponse.json({ error: 'unknown type cannot be deleted' }, { status: 400 });
         }
 
-        await db.query(`UPDATE projects SET type = 'unknown' WHERE type = $1`, [typeName]);
+        await db.query(
+            `UPDATE objects
+             SET metadata = jsonb_set(
+                   COALESCE(metadata, '{}'::jsonb),
+                   '{project_type}',
+                   '\"unknown\"'::jsonb,
+                   TRUE
+                 ),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = 'default'
+               AND object_type = 'service'
+               AND COALESCE(metadata->>'project_type', 'unknown') = $1`,
+            [typeName]
+        );
         await db.query(`DELETE FROM project_types WHERE id = $1`, [typeId]);
 
         return NextResponse.json({ success: true });

@@ -1,5 +1,6 @@
-import { getDb } from '@/lib/db';
+import { getDb } from '@archi-navi/core';
 import { ProjectListManager } from '@/components/project-list-manager';
+import { getProjectStatusFromMetadata, getProjectTypeFromMetadata } from '@archi-navi/core';
 
 interface Tag {
   id: string;
@@ -16,15 +17,13 @@ interface ProjectType {
 }
 
 interface ProjectRow {
-  id: string;
-  repo_name: string;
-  alias: string | null;
-  description: string | null;
-  type: string;
+  object_id: string;
+  urn: string | null;
+  name: string;
+  display_name: string | null;
+  metadata: unknown;
   visibility: string;
-  status: string;
   updated_at: Date;
-  last_seen_at: Date | null;
   inbound_count: number | string;
   outbound_count: number | string;
 }
@@ -45,38 +44,45 @@ async function getProjects() {
     const [projectsResult, tagsResult] = await Promise.all([
       db.query<ProjectRow>(`
         SELECT
-          p.id,
-          p.repo_name,
-          p.alias,
-          p.description,
-          p.type,
-          p.visibility,
-          p.status,
-          p.updated_at,
-          p.last_seen_at,
+          o.id AS object_id,
+          o.urn,
+          o.name,
+          o.display_name,
+          o.metadata,
+          o.visibility,
+          o.updated_at,
           (
             SELECT COUNT(*)::int
-            FROM edges e
-            WHERE e.to_id = p.id
-              AND e.approved = TRUE
+            FROM object_relations r
+            WHERE r.workspace_id = 'default'
+              AND r.target_object_id = o.id
+              AND r.approved = TRUE
           ) AS inbound_count,
           (
             SELECT COUNT(*)::int
-            FROM edges e
-            WHERE e.from_id = p.id
-              AND e.approved = TRUE
+            FROM object_relations r
+            WHERE r.workspace_id = 'default'
+              AND r.subject_object_id = o.id
+              AND r.approved = TRUE
           ) AS outbound_count
-        FROM projects p
-        ORDER BY p.updated_at DESC
+        FROM objects o
+        WHERE o.workspace_id = 'default'
+          AND o.object_type = 'service'
+          AND o.urn IS NOT NULL
+        ORDER BY o.updated_at DESC
       `),
       db.query<ProjectTagRow>(`
         SELECT
-          pt.project_id,
+          o.urn AS project_id,
           t.id AS tag_id,
           t.name,
           t.color_hex
-        FROM project_tags pt
-        JOIN tags t ON t.id = pt.tag_id
+        FROM object_tags ot
+        JOIN tags t ON t.id = ot.tag_id
+        JOIN objects o ON o.id = ot.object_id
+        WHERE ot.workspace_id = 'default'
+          AND o.object_type = 'service'
+          AND o.urn IS NOT NULL
       `),
     ]);
 
@@ -91,20 +97,27 @@ async function getProjects() {
       tagMap.set(row.project_id, list);
     }
 
-    return projectsResult.rows.map((p) => ({
-      id: p.id,
-      repo_name: p.repo_name,
-      alias: p.alias,
-      description: p.description,
-      type: p.type,
-      visibility: p.visibility,
-      status: p.status,
-      updated_at: p.updated_at.toISOString(),
-      last_seen_at: p.last_seen_at ? p.last_seen_at.toISOString() : null,
-      inbound_count: Number(p.inbound_count ?? 0),
-      outbound_count: Number(p.outbound_count ?? 0),
-      tags: tagMap.get(p.id) ?? [],
-    }));
+    return projectsResult.rows.map((p) => {
+      const projectId = p.urn || p.object_id;
+      const metadata = (p.metadata && typeof p.metadata === 'object')
+        ? (p.metadata as Record<string, unknown>)
+        : {};
+
+      return {
+        id: projectId,
+        repo_name: p.name,
+        alias: p.display_name,
+        description: typeof metadata.description === 'string' ? metadata.description : null,
+        type: getProjectTypeFromMetadata(metadata),
+        visibility: p.visibility,
+        status: getProjectStatusFromMetadata(metadata),
+        updated_at: p.updated_at.toISOString(),
+        last_seen_at: typeof metadata.last_seen_at === 'string' ? metadata.last_seen_at : null,
+        inbound_count: Number(p.inbound_count ?? 0),
+        outbound_count: Number(p.outbound_count ?? 0),
+        tags: tagMap.get(projectId) ?? [],
+      };
+    });
   } catch (error) {
     console.error('Failed to fetch projects:', error);
     return [];
@@ -123,6 +136,7 @@ async function getSettingsData() {
     db.query<{ id: number; name: string; color_hex: string }>(`
       SELECT id, name, color_hex
       FROM tags
+      WHERE workspace_id = 'default'
       ORDER BY name ASC
     `),
   ]);

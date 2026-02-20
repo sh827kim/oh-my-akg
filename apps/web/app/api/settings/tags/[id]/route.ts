@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { getDb } from '@archi-navi/core';
 
 interface ParamsContext {
     params: Promise<{ id: string }>;
@@ -39,6 +39,7 @@ export async function PATCH(req: NextRequest, context: ParamsContext) {
               UPDATE tags
               SET ${updates.join(', ')}
               WHERE id = $1
+                AND workspace_id = 'default'
               RETURNING id, name, color_hex
             `,
             values
@@ -65,8 +66,8 @@ export async function DELETE(_: NextRequest, context: ParamsContext) {
         }
 
         const db = await getDb();
-        await db.query(`DELETE FROM project_tags WHERE tag_id = $1`, [tagId]);
-        await db.query(`DELETE FROM tags WHERE id = $1`, [tagId]);
+        await db.query(`DELETE FROM object_tags WHERE workspace_id = 'default' AND tag_id = $1`, [tagId]);
+        await db.query(`DELETE FROM tags WHERE workspace_id = 'default' AND id = $1`, [tagId]);
 
         return NextResponse.json({ success: true });
     } catch (error) {

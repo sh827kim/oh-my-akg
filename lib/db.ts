@@ -1,1 +1,1 @@
-export { getDb, initSchema } from '../packages/core/src/db';
+export { getDb, initSchema } from '@archi-navi/core';
