@@ -58,11 +58,13 @@ async function getProjects() {
             SELECT COUNT(*)::int
             FROM edges e
             WHERE e.to_id = p.id
+              AND e.approved = TRUE
           ) AS inbound_count,
           (
             SELECT COUNT(*)::int
             FROM edges e
             WHERE e.from_id = p.id
+              AND e.approved = TRUE
           ) AS outbound_count
         FROM projects p
         ORDER BY p.updated_at DESC

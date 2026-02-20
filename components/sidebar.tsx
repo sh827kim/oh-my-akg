@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { LayoutDashboard, Network, Layers, Settings, MessageSquare, Search } from 'lucide-react';
+import { LayoutDashboard, Network, Layers, Settings, ClipboardCheck, Search } from 'lucide-react';
 import { useDebouncedCallback } from 'use-debounce';
 
 const navItems = [
@@ -10,6 +10,7 @@ const navItems = [
     { href: '/graph', label: 'Dependency Graph', icon: Network },
     { href: '/architecture', label: 'Architecture', icon: Layers },
     // { href: '/kafka', label: 'Kafka Topics', icon: MessageSquare }, // Will be enabled later
+    { href: '/approvals', label: 'Approvals', icon: ClipboardCheck },
     { href: '/settings', label: 'Settings', icon: Settings },
 ];
 

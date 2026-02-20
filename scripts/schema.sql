@@ -116,3 +116,27 @@ CREATE TABLE IF NOT EXISTS change_requests (
   status TEXT DEFAULT 'PENDING', -- 'PENDING', 'APPROVED', 'REJECTED'
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  id TEXT PRIMARY KEY,
+  applied_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM schema_migrations
+    WHERE id = '2026-02-20-backfill-edge-approvals'
+  ) THEN
+    UPDATE edges
+    SET approved = TRUE
+    WHERE approved = FALSE;
+
+    INSERT INTO schema_migrations (id)
+    VALUES ('2026-02-20-backfill-edge-approvals');
+  END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS edges_unique_triplet_idx
+  ON edges (from_id, to_id, type);
