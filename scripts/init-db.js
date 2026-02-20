@@ -1,14 +1,9 @@
-const { initSchema } = require('./lib/db');
+import { spawnSync } from 'node:child_process';
 
-async function main() {
-    try {
-        console.log('Initializing database schema...');
-        await initSchema();
-        console.log('Database schema initialized.');
-    } catch (error) {
-        console.error('Failed to initialize database:', error);
-        process.exit(1);
-    }
+const result = spawnSync('npx', ['ts-node', '-P', 'tsconfig.scripts.json', 'scripts/init-db.ts'], {
+    stdio: 'inherit',
+});
+
+if (result.status !== 0) {
+    process.exit(result.status ?? 1);
 }
-
-main();

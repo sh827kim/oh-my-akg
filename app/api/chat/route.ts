@@ -23,7 +23,10 @@ async function getContext() {
 
 export async function POST(req: NextRequest) {
     try {
-        const { messages } = await req.json();
+        const { messages } = await req.json() as { messages?: Array<{ role: 'user' | 'assistant'; content: string }> };
+        if (!Array.isArray(messages)) {
+            return NextResponse.json({ error: 'messages must be an array' }, { status: 400 });
+        }
         const lastMessage = messages[messages.length - 1];
 
         if (!lastMessage) {
@@ -62,7 +65,7 @@ export async function POST(req: NextRequest) {
 
         const chatMessages = [
             new SystemMessage(systemPrompt),
-            ...messages.map((m: any) =>
+            ...messages.map((m) =>
                 m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)
             )
         ];
@@ -71,11 +74,11 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ content: response.content });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Chat API Error:', error);
         return NextResponse.json({
             error: 'Internal Server Error',
-            details: error.message
+            details: error instanceof Error ? error.message : String(error)
         }, { status: 500 });
     }
 }

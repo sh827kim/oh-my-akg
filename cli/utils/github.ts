@@ -7,7 +7,7 @@ export const getOctokit = () => {
     if (!token) {
         try {
             token = execSync('gh auth token', { encoding: 'utf8' }).trim();
-        } catch (error) {
+        } catch {
             // Ignore error, token remains undefined
         }
     }
@@ -26,6 +26,7 @@ export interface RepoInfo {
     visibility: string;
     language: string | null;
     updated_at: string;
+    default_branch: string;
 }
 
 export const fetchRepos = async (org: string): Promise<RepoInfo[]> => {
@@ -51,6 +52,7 @@ export const fetchRepos = async (org: string): Promise<RepoInfo[]> => {
                     visibility: repo.visibility || 'public',
                     language: repo.language || null,
                     updated_at: repo.updated_at || new Date().toISOString(),
+                    default_branch: repo.default_branch || 'main',
                 });
             }
         }
