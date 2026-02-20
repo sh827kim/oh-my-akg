@@ -7,6 +7,15 @@ const globalForDb = globalThis as unknown as {
   dbInstance: PGlite | undefined;
 };
 
+
+const PGliteWithAssets = PGlite as unknown as new (
+  dataDir: string,
+  options: {
+    wasmModule: WebAssembly.Module;
+    fsBundle: Blob;
+  },
+) => PGlite;
+
 export const getDb = async () => {
   // 1. Return existing instance if available (Singleton for Dev Mode)
   if (globalForDb.dbInstance) {
@@ -41,8 +50,7 @@ export const getDb = async () => {
 
     console.log(`[DB] Initializing PGlite at ${dataDir} (Manual Load)...`);
 
-    // @ts-expect-error PGlite constructor options type does not include precompiled wasm/fsBundle in this version
-    const db = new PGlite(dataDir, {
+    const db = new PGliteWithAssets(dataDir, {
       wasmModule: wasmModule,
       fsBundle: dataBundleBlob,
     });
@@ -84,8 +92,7 @@ export const getDb = async () => {
       const dataBundleBuffer = fs.readFileSync(dataBundlePath);
       const dataBundleBlob = new Blob([dataBundleBuffer]);
 
-      // @ts-expect-error PGlite constructor options type does not include precompiled wasm/fsBundle in this version
-      const memDb = new PGlite('memory://', {
+      const memDb = new PGliteWithAssets('memory://', {
         wasmModule: wasmModule,
         fsBundle: dataBundleBlob,
       });

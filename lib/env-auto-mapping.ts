@@ -1,5 +1,5 @@
 import type { Octokit } from 'octokit';
-import { getOctokit, type RepoInfo } from '@/cli/utils/github';
+import { getOctokit, type RepoInfo } from '../cli/utils/github';
 
 export interface MappingCandidate {
     fromId: string;
