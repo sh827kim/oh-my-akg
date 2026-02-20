@@ -225,7 +225,7 @@ ARCHI_NAVI_DB_PATH=data/akg-db
 -   PRD: `docs/prd/PRD.md`
 -   Spec: `docs/spec/object-model-definition.md`
 -   Implementation Spec: `docs/spec/2026-02-20_implementation-spec-core-api.md`
--   Monorepo Transition Tasks: `docs/tasks/2026-02-20_monorepo-transition-task-breakdown.md`
+-   Master Roadmap: `docs/tasks/2026-02-20_master-roadmap-and-task-breakdown.md`
 
 ------------------------------------------------------------------------
 
