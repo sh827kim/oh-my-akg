@@ -53,6 +53,7 @@ export function isDependencyUpsertPayload(value: unknown): value is DependencyUp
     typeof v.fromId === 'string' &&
     typeof v.toId === 'string' &&
     typeof v.type === 'string' &&
-    normalizeRelationType(v.type) === v.type
+    v.fromId.trim().length > 0 &&
+    v.toId.trim().length > 0
   );
 }

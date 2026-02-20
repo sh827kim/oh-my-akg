@@ -65,11 +65,18 @@ export async function POST(req: NextRequest) {
         );
         created++;
       } else {
+        const existingMetadata = existing.rows[0].metadata;
+        const hasProjectType =
+          !!existingMetadata &&
+          typeof existingMetadata === 'object' &&
+          typeof (existingMetadata as { project_type?: unknown }).project_type === 'string' &&
+          !!(existingMetadata as { project_type: string }).project_type.trim();
+
         const metadata = buildServiceMetadata({
-          existing: existing.rows[0].metadata,
+          existing: existingMetadata,
           repoUrl: repo.url,
           description: repo.description,
-          projectType,
+          ...(hasProjectType ? {} : { projectType }),
           status: 'ACTIVE',
           lastSeenAt: new Date().toISOString(),
         });
