@@ -211,4 +211,4 @@ MSA/멀티 레포 환경에서는 아래 문제가 반복된다.
 - 의사결정/합의 문서: [`../spec/2026-02-20_feasibility-and-decision-questions.md`](../spec/2026-02-20_feasibility-and-decision-questions.md)
 - 레포/배포 검토: [`../design/2026-02-20_repo-structure-and-npm-distribution-review.md`](../design/2026-02-20_repo-structure-and-npm-distribution-review.md)
 - 모노레포 전환 설계: [`../design/2026-02-20_monorepo-transition-design.md`](../design/2026-02-20_monorepo-transition-design.md)
-- 모노레포 전환 Task: [`../tasks/2026-02-20_monorepo-transition-task-breakdown.md`](../tasks/2026-02-20_monorepo-transition-task-breakdown.md)
+- 마스터 로드맵: [`../tasks/2026-02-20_master-roadmap-and-task-breakdown.md`](../tasks/2026-02-20_master-roadmap-and-task-breakdown.md)
