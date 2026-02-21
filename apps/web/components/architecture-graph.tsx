@@ -83,7 +83,7 @@ export function ArchitectureGraph({
         async (projectId: string) => {
             try {
                 setIsHiding(true);
-                const res = await fetch('/api/projects', {
+                const res = await fetch('/api/objects', {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: projectId, visibility: 'HIDDEN' }),

@@ -153,7 +153,7 @@ export function ProjectListManager({
     };
 
     const patchProject = async (id: string, patch: Record<string, string>) => {
-        const res = await fetch('/api/projects', {
+        const res = await fetch('/api/objects', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id, ...patch }),
@@ -208,7 +208,7 @@ export function ProjectListManager({
 
     const handleAddTag = async (projectId: string, tagId: string) => {
         try {
-            const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tags`, {
+            const res = await fetch(`/api/objects/${encodeURIComponent(projectId)}/tags`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tagId }),
@@ -234,7 +234,7 @@ export function ProjectListManager({
 
     const handleRemoveTag = async (projectId: string, tagId: string) => {
         try {
-            const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tags`, {
+            const res = await fetch(`/api/objects/${encodeURIComponent(projectId)}/tags`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tagId }),
@@ -290,7 +290,7 @@ export function ProjectListManager({
         }
         setAddLoading(true);
         try {
-            const res = await fetch('/api/projects', {
+            const res = await fetch('/api/objects', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -330,7 +330,7 @@ export function ProjectListManager({
         if (!deleteTarget) return;
         setDeleteLoading(true);
         try {
-            const res = await fetch(`/api/projects?id=${encodeURIComponent(deleteTarget.id)}`, {
+            const res = await fetch(`/api/objects?id=${encodeURIComponent(deleteTarget.id)}`, {
                 method: 'DELETE',
             });
             const json = await res.json().catch(() => ({}));
