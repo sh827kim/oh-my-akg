@@ -1,6 +1,47 @@
 import type { RelationType } from './project-model';
 
 export type RelationSource = 'manual' | 'scan' | 'inference' | 'rollup';
+
+// OBJECT_CREATE change request payload
+// inference 엔진이 발견한 새 Object(api_endpoint, db_table, topic 등)를 등록 요청
+export interface ObjectCreatePayload {
+    urn: string;
+    objectType: string;
+    name: string;
+    displayName?: string;
+    parentUrn?: string;
+    granularity: 'COMPOUND' | 'ATOMIC';
+    metadata?: Record<string, unknown>;
+    source: 'inference';
+    confidence: number;
+    evidence: string;
+    scoreVersion?: string;
+}
+
+export function parseObjectCreatePayload(value: unknown): ObjectCreatePayload {
+    if (!value || typeof value !== 'object') throw new Error('OBJ_PAYLOAD_INVALID');
+    const r = value as Record<string, unknown>;
+    if (!r.urn || typeof r.urn !== 'string') throw new Error('OBJ_PAYLOAD_URN_REQUIRED');
+    if (!r.objectType || typeof r.objectType !== 'string') throw new Error('OBJ_PAYLOAD_TYPE_REQUIRED');
+    if (!r.name || typeof r.name !== 'string') throw new Error('OBJ_PAYLOAD_NAME_REQUIRED');
+    return {
+        urn: r.urn.trim(),
+        objectType: r.objectType.trim(),
+        name: r.name.trim(),
+        displayName: typeof r.displayName === 'string' ? r.displayName.trim() : undefined,
+        parentUrn: typeof r.parentUrn === 'string' ? r.parentUrn.trim() : undefined,
+        granularity: r.granularity === 'COMPOUND' ? 'COMPOUND' : 'ATOMIC',
+        metadata: r.metadata && typeof r.metadata === 'object' ? (r.metadata as Record<string, unknown>) : undefined,
+        source: 'inference',
+        confidence: typeof r.confidence === 'number' ? r.confidence : 0,
+        evidence: typeof r.evidence === 'string' ? r.evidence : '',
+        scoreVersion: typeof r.scoreVersion === 'string' ? r.scoreVersion : undefined,
+    };
+}
+
+export function isObjectCreatePayload(value: unknown): value is ObjectCreatePayload {
+    try { parseObjectCreatePayload(value); return true; } catch { return false; }
+}
 export type InferenceReviewTag = 'LOW_CONFIDENCE' | 'NORMAL';
 
 export interface DependencyUpsertPayload {

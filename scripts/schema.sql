@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS change_requests (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
   reviewed_at TIMESTAMP WITH TIME ZONE,
   CONSTRAINT change_requests_request_type_check CHECK (
-    request_type IN ('RELATION_UPSERT', 'RELATION_DELETE', 'OBJECT_PATCH')
+    request_type IN ('RELATION_UPSERT', 'RELATION_DELETE', 'OBJECT_PATCH', 'OBJECT_CREATE')
   ),
   CONSTRAINT change_requests_status_check CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED'))
 );

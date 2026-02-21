@@ -2,9 +2,19 @@
   "name": "@archi-navi/inference",
   "version": "0.1.0",
   "private": true,
-  "description": "Inference pipeline and AST plugins",
+  "description": "Inference pipeline with real AST parsers",
   "dependencies": {
-    "@archi-navi/config": "workspace:*"
+    "@archi-navi/config": "workspace:*",
+    "@babel/parser": "^7.25.0",
+    "@babel/traverse": "^7.25.0",
+    "@babel/types": "^7.25.0",
+    "node-sql-parser": "^5.0.0",
+    "web-tree-sitter": "^0.24.0"
+  },
+  "devDependencies": {
+    "@types/babel__traverse": "^7.20.0",
+    "tree-sitter-java": "^0.23.0",
+    "tree-sitter-python": "^0.23.0"
   },
   "main": "src/index.ts",
   "types": "src/index.ts"

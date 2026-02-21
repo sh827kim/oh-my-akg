@@ -5,7 +5,7 @@ import { fetchRepos } from '@archi-navi/config';
 import { buildDependencyUpsertPayload } from '@archi-navi/core';
 import { buildServiceMetadata, inferProjectType } from '@archi-navi/core';
 import { getWorkspaceInferenceSettings, recordInferenceRunMetrics } from '@archi-navi/core';
-import { inferEnvMappingCandidatesWithMetrics } from '@archi-navi/inference';
+import { runInferencePipeline } from '@archi-navi/inference';
 
 export async function POST(req: NextRequest) {
   try {
@@ -141,45 +141,56 @@ export async function POST(req: NextRequest) {
       deleted++;
     }
 
-    const mappingPatternsResult = await db.query<{
-      pattern: string;
-      target_object_urn: string;
-      dependency_type: string;
-      enabled: boolean;
-    }>(
-      `SELECT pattern, target_object_urn, dependency_type, enabled
-       FROM auto_mapping_patterns
-       WHERE enabled = TRUE`,
-    );
-
-    const inferenceResult = await inferEnvMappingCandidatesWithMetrics(
-      repos,
-      mappingPatternsResult.rows,
-      {
-        astPluginsEnabled,
-        fallbackEnabled,
-      },
-    );
-    const envMappingCandidates = inferenceResult.candidates;
+    // 새 2-pass 추론 파이프라인 실행
+    const inferenceResult = await runInferencePipeline(repos, { astPluginsEnabled, fallbackEnabled });
+    const { objectCandidates, relationCandidates, metrics } = inferenceResult;
 
     await recordInferenceRunMetrics(db, {
       workspaceId,
-      mode: inferenceResult.metrics.mode,
+      mode: metrics.mode,
       shadowMode,
       astPluginsEnabled,
       fallbackEnabled,
-      repoCount: inferenceResult.metrics.repoCount,
-      configFilesScanned: inferenceResult.metrics.configFilesScanned,
-      sourceFilesScanned: inferenceResult.metrics.sourceFilesScanned,
-      candidateCount: inferenceResult.metrics.candidateCount,
-      lowConfidenceCount: inferenceResult.metrics.lowConfidenceCount,
-      avgConfidence: inferenceResult.metrics.avgConfidence,
-      failures: inferenceResult.metrics.failures,
-      durationMs: inferenceResult.metrics.durationMs,
-      throughputPerSec: inferenceResult.metrics.throughputPerSec,
+      repoCount: metrics.repoCount,
+      configFilesScanned: metrics.configFilesScanned,
+      sourceFilesScanned: metrics.sourceFilesScanned,
+      candidateCount: objectCandidates.length + relationCandidates.length,
+      lowConfidenceCount: metrics.lowConfidenceCount,
+      avgConfidence: metrics.avgConfidence,
+      failures: metrics.failures,
+      durationMs: metrics.durationMs,
+      throughputPerSec: metrics.throughputPerSec,
     });
 
-    for (const candidate of envMappingCandidates) {
+    // OBJECT_CREATE 먼저 적재
+    for (const obj of objectCandidates) {
+      if (shadowMode) { shadowAutoMappingCandidates++; continue; }
+
+      const objectExists = await db.query<{ id: string }>(
+        `SELECT id FROM objects WHERE workspace_id = $1 AND urn = $2 LIMIT 1`,
+        [workspaceId, obj.urn],
+      );
+      if (objectExists.rows.length > 0) continue;
+
+      const dupObj = await db.query<{ id: number }>(
+        `SELECT id FROM change_requests
+         WHERE workspace_id = $1 AND status = 'PENDING'
+           AND request_type = 'OBJECT_CREATE'
+           AND payload @> $2::jsonb LIMIT 1`,
+        [workspaceId, JSON.stringify({ urn: obj.urn })],
+      );
+      if (dupObj.rows.length > 0) continue;
+
+      await db.query(
+        `INSERT INTO change_requests (workspace_id, request_type, payload, status, requested_by)
+         VALUES ($1, 'OBJECT_CREATE', $2::jsonb, 'PENDING', $3)`,
+        [workspaceId, JSON.stringify(obj), `inference:${obj.objectType}`],
+      );
+      autoMappingApprovalsCreated++;
+    }
+
+    // RELATION_UPSERT 적재
+    for (const candidate of relationCandidates) {
       const payload = buildDependencyUpsertPayload({
         fromId: candidate.fromId,
         toId: candidate.toId,
@@ -188,14 +199,11 @@ export async function POST(req: NextRequest) {
         confidence: candidate.confidence,
         evidence: candidate.evidence,
         scoreVersion: candidate.scoreVersion,
-        reviewTag: candidate.reviewLane === 'low_confidence' ? 'LOW_CONFIDENCE' : 'NORMAL',
+        reviewTag: candidate.reviewTag,
         tags: candidate.tags,
       });
 
-      if (shadowMode) {
-        shadowAutoMappingCandidates++;
-        continue;
-      }
+      if (shadowMode) { shadowAutoMappingCandidates++; continue; }
 
       const dedupe = await db.query<{ id: number }>(
         `SELECT id FROM change_requests
@@ -206,7 +214,6 @@ export async function POST(req: NextRequest) {
          LIMIT 1`,
         [workspaceId, JSON.stringify({ fromId: payload.fromId, toId: payload.toId, type: payload.type })],
       );
-
       if (dedupe.rows.length > 0) continue;
 
       const relationExists = await db.query<{ id: string }>(
@@ -222,7 +229,6 @@ export async function POST(req: NextRequest) {
          LIMIT 1`,
         [workspaceId, payload.fromId, payload.toId, payload.type],
       );
-
       if (relationExists.rows.length > 0) continue;
 
       const requestedBy = candidate.reviewLane === 'low_confidence'
