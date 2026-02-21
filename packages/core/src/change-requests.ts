@@ -63,6 +63,38 @@ function assertAllowedChangeRequestSource(source: RelationSource): void {
   }
 }
 
+function buildEvidenceEnvelope(payload: DependencyUpsertPayload): Array<Record<string, unknown>> {
+  if (!payload.evidence) return [];
+
+  if (payload.evidence.startsWith('v1|')) {
+    const [schemaVersion, kind, file, lineRaw, symbol, snippetHash, detail] = payload.evidence.split('|');
+    const line = Number(lineRaw);
+
+    return [{
+      schemaVersion,
+      kind: kind || payload.source,
+      file: file || '',
+      ...(Number.isFinite(line) ? { line } : {}),
+      ...(symbol ? { symbol } : {}),
+      ...(snippetHash ? { snippetHash } : {}),
+      ...(detail ? { detail } : {}),
+      ...(payload.scoreVersion ? { scoreVersion: payload.scoreVersion } : {}),
+      ...(payload.reviewTag ? { reviewTag: payload.reviewTag } : {}),
+      ...(payload.tags ? { tags: payload.tags } : {}),
+      source: payload.source,
+    }];
+  }
+
+  return [{
+    schemaVersion: 'legacy',
+    kind: payload.source,
+    value: payload.evidence,
+    ...(payload.scoreVersion ? { scoreVersion: payload.scoreVersion } : {}),
+    ...(payload.reviewTag ? { reviewTag: payload.reviewTag } : {}),
+    ...(payload.tags ? { tags: payload.tags } : {}),
+  }];
+}
+
 async function resolveServiceObjectId(db: DbLike, urn: string): Promise<string | null> {
   const result = await db.query<{ id: string }>(
     `SELECT id
@@ -174,11 +206,7 @@ export async function applyChangeRequest(
         }
 
         if (cr.request_type === 'RELATION_UPSERT') {
-          const evidenceJson = JSON.stringify(
-            dependencyPayload?.evidence
-              ? [{ kind: dependencyPayload.source, value: dependencyPayload.evidence }]
-              : [],
-          );
+          const evidenceJson = JSON.stringify(buildEvidenceEnvelope(dependencyPayload));
 
           await db.query(
             `INSERT INTO object_relations

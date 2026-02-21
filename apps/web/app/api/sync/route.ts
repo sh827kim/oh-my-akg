@@ -4,12 +4,14 @@ import { getDb } from '@archi-navi/core';
 import { fetchRepos } from '@archi-navi/config';
 import { buildDependencyUpsertPayload } from '@archi-navi/core';
 import { buildServiceMetadata, inferProjectType } from '@archi-navi/core';
-import { inferEnvMappingCandidates } from '@archi-navi/inference';
+import { getWorkspaceInferenceSettings, recordInferenceRunMetrics } from '@archi-navi/core';
+import { inferEnvMappingCandidatesWithMetrics } from '@archi-navi/inference';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const org = (typeof body.org === 'string' ? body.org : process.env.GITHUB_ORG)?.trim();
+    const requestedWorkspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : undefined;
     const dependencyCandidates = Array.isArray(body.dependency_candidates) ? body.dependency_candidates : [];
 
     if (!org) {
@@ -21,6 +23,20 @@ export async function POST(req: NextRequest) {
 
     const repos = await fetchRepos(org);
     const db = await getDb();
+    const inferenceSettings = await getWorkspaceInferenceSettings(db, requestedWorkspaceId);
+    const workspaceId = inferenceSettings.workspaceId;
+    const astPluginsEnabled =
+      typeof body.astPluginsEnabled === 'boolean'
+        ? body.astPluginsEnabled
+        : inferenceSettings.astPluginsEnabled;
+    const shadowMode =
+      typeof body.shadowMode === 'boolean'
+        ? body.shadowMode
+        : inferenceSettings.shadowModeEnabled;
+    const fallbackEnabled =
+      typeof body.fallbackEnabled === 'boolean'
+        ? body.fallbackEnabled
+        : inferenceSettings.fallbackEnabled;
 
     const validTypesRes = await db.query<{ name: string }>('SELECT name FROM project_types');
     const validTypes = new Set(validTypesRes.rows.map((row) => row.name));
@@ -31,6 +47,8 @@ export async function POST(req: NextRequest) {
     let deleted = 0;
     let changeRequestsCreated = 0;
     let autoMappingApprovalsCreated = 0;
+    let shadowAutoMappingCandidates = 0;
+    let shadowManualCandidates = 0;
 
     const seenUrns = new Set<string>();
 
@@ -40,10 +58,10 @@ export async function POST(req: NextRequest) {
       const existing = await db.query<{ id: string; metadata: unknown }>(
         `SELECT id, metadata
          FROM objects
-         WHERE workspace_id = 'default'
+         WHERE workspace_id = $1
            AND object_type = 'service'
-           AND urn = $1`,
-        [repo.id],
+           AND urn = $2`,
+        [workspaceId, repo.id],
       );
 
       const projectType = normalizeType(inferProjectType(repo.name, repo.language));
@@ -60,8 +78,8 @@ export async function POST(req: NextRequest) {
         await db.query(
           `INSERT INTO objects
            (id, workspace_id, object_type, name, display_name, urn, visibility, granularity, metadata)
-           VALUES ($1, 'default', 'service', $2, NULL, $3, 'VISIBLE', 'COMPOUND', $4::jsonb)`,
-          [randomUUID(), repo.name, repo.id, JSON.stringify(metadata)],
+           VALUES ($1, $2, 'service', $3, NULL, $4, 'VISIBLE', 'COMPOUND', $5::jsonb)`,
+          [randomUUID(), workspaceId, repo.name, repo.id, JSON.stringify(metadata)],
         );
         created++;
       } else {
@@ -96,11 +114,11 @@ export async function POST(req: NextRequest) {
     const existingActive = await db.query<{ id: string; metadata: unknown; urn: string }>(
       `SELECT id, metadata, urn
        FROM objects
-       WHERE workspace_id = 'default'
+       WHERE workspace_id = $1
          AND object_type = 'service'
          AND COALESCE(metadata->>'status', 'ACTIVE') = 'ACTIVE'
-         AND urn LIKE $1`,
-      [`${org}/%`],
+         AND urn LIKE $2`,
+      [workspaceId, `${org}/%`],
     );
 
     for (const row of existingActive.rows) {
@@ -134,7 +152,32 @@ export async function POST(req: NextRequest) {
        WHERE enabled = TRUE`,
     );
 
-    const envMappingCandidates = await inferEnvMappingCandidates(repos, mappingPatternsResult.rows);
+    const inferenceResult = await inferEnvMappingCandidatesWithMetrics(
+      repos,
+      mappingPatternsResult.rows,
+      {
+        astPluginsEnabled,
+        fallbackEnabled,
+      },
+    );
+    const envMappingCandidates = inferenceResult.candidates;
+
+    await recordInferenceRunMetrics(db, {
+      workspaceId,
+      mode: inferenceResult.metrics.mode,
+      shadowMode,
+      astPluginsEnabled,
+      fallbackEnabled,
+      repoCount: inferenceResult.metrics.repoCount,
+      configFilesScanned: inferenceResult.metrics.configFilesScanned,
+      sourceFilesScanned: inferenceResult.metrics.sourceFilesScanned,
+      candidateCount: inferenceResult.metrics.candidateCount,
+      lowConfidenceCount: inferenceResult.metrics.lowConfidenceCount,
+      avgConfidence: inferenceResult.metrics.avgConfidence,
+      failures: inferenceResult.metrics.failures,
+      durationMs: inferenceResult.metrics.durationMs,
+      throughputPerSec: inferenceResult.metrics.throughputPerSec,
+    });
 
     for (const candidate of envMappingCandidates) {
       const payload = buildDependencyUpsertPayload({
@@ -144,16 +187,24 @@ export async function POST(req: NextRequest) {
         source: candidate.source,
         confidence: candidate.confidence,
         evidence: candidate.evidence,
+        scoreVersion: candidate.scoreVersion,
+        reviewTag: candidate.reviewLane === 'low_confidence' ? 'LOW_CONFIDENCE' : 'NORMAL',
+        tags: candidate.tags,
       });
+
+      if (shadowMode) {
+        shadowAutoMappingCandidates++;
+        continue;
+      }
 
       const dedupe = await db.query<{ id: number }>(
         `SELECT id FROM change_requests
-         WHERE workspace_id = 'default'
+         WHERE workspace_id = $1
            AND status = 'PENDING'
            AND request_type = 'RELATION_UPSERT'
-           AND payload @> $1::jsonb
+           AND payload @> $2::jsonb
          LIMIT 1`,
-        [JSON.stringify({ fromId: payload.fromId, toId: payload.toId, type: payload.type })],
+        [workspaceId, JSON.stringify({ fromId: payload.fromId, toId: payload.toId, type: payload.type })],
       );
 
       if (dedupe.rows.length > 0) continue;
@@ -163,21 +214,25 @@ export async function POST(req: NextRequest) {
          FROM approved_object_relations r
          JOIN objects s ON s.id = r.subject_object_id
          JOIN objects t ON t.id = r.target_object_id
-         WHERE r.workspace_id = 'default'
+         WHERE r.workspace_id = $1
            AND r.is_derived = FALSE
-           AND s.urn = $1
-           AND t.urn = $2
-           AND r.relation_type = $3
+           AND s.urn = $2
+           AND t.urn = $3
+           AND r.relation_type = $4
          LIMIT 1`,
-        [payload.fromId, payload.toId, payload.type],
+        [workspaceId, payload.fromId, payload.toId, payload.type],
       );
 
       if (relationExists.rows.length > 0) continue;
 
+      const requestedBy = candidate.reviewLane === 'low_confidence'
+        ? `${payload.fromId}:low-confidence`
+        : payload.fromId;
+
       await db.query(
         `INSERT INTO change_requests (workspace_id, request_type, payload, status, requested_by)
-         VALUES ('default', 'RELATION_UPSERT', $1::jsonb, 'PENDING', $2)`,
-        [JSON.stringify(payload), payload.fromId],
+         VALUES ($1, 'RELATION_UPSERT', $2::jsonb, 'PENDING', $3)`,
+        [workspaceId, JSON.stringify(payload), requestedBy],
       );
       autoMappingApprovalsCreated++;
     }
@@ -201,6 +256,14 @@ export async function POST(req: NextRequest) {
           source: typeof candidate?.source === 'string' ? candidate.source : 'inference',
           confidence: candidate?.confidence,
           evidence: candidate?.evidence,
+          scoreVersion: typeof candidate?.scoreVersion === 'string' ? candidate.scoreVersion : 'v1.0',
+          reviewTag:
+            typeof candidate?.reviewTag === 'string'
+              ? candidate.reviewTag
+              : Number(candidate?.confidence) < 0.65
+                ? 'LOW_CONFIDENCE'
+                : 'NORMAL',
+          tags: Array.isArray(candidate?.tags) ? candidate.tags : undefined,
         });
       } catch (error) {
         return NextResponse.json(
@@ -212,22 +275,31 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      if (shadowMode) {
+        shadowManualCandidates++;
+        continue;
+      }
+
       const dedupe = await db.query<{ id: number }>(
         `SELECT id FROM change_requests
-         WHERE workspace_id = 'default'
+         WHERE workspace_id = $1
            AND status = 'PENDING'
            AND request_type = 'RELATION_UPSERT'
-           AND payload @> $1::jsonb
+           AND payload @> $2::jsonb
          LIMIT 1`,
-        [JSON.stringify({ fromId: payload.fromId, toId: payload.toId, type: payload.type })],
+        [workspaceId, JSON.stringify({ fromId: payload.fromId, toId: payload.toId, type: payload.type })],
       );
 
       if (dedupe.rows.length > 0) continue;
 
+      const requestedBy = payload.reviewTag === 'LOW_CONFIDENCE'
+        ? `${payload.fromId}:low-confidence`
+        : payload.fromId;
+
       await db.query(
         `INSERT INTO change_requests (workspace_id, request_type, payload, status, requested_by)
-         VALUES ('default', 'RELATION_UPSERT', $1::jsonb, 'PENDING', $2)`,
-        [JSON.stringify(payload), payload.fromId],
+         VALUES ($1, 'RELATION_UPSERT', $2::jsonb, 'PENDING', $3)`,
+        [workspaceId, JSON.stringify(payload), requestedBy],
       );
       changeRequestsCreated++;
     }
@@ -235,11 +307,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       org,
+      workspaceId,
       created,
       updated,
       deleted,
       changeRequestsCreated,
       autoMappingApprovalsCreated,
+      shadowMode,
+      shadowAutoMappingCandidates,
+      shadowManualCandidates,
+      inference: {
+        mode: inferenceResult.metrics.mode,
+        astPluginsEnabled,
+        fallbackEnabled,
+        metrics: inferenceResult.metrics,
+      },
       total: repos.length,
     });
   } catch (error) {

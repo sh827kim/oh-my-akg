@@ -3,9 +3,48 @@ export interface SourceFile {
   content: string;
 }
 
+export type AstRelationType =
+  | 'call'
+  | 'expose'
+  | 'read'
+  | 'write'
+  | 'produce'
+  | 'consume'
+  | 'depend_on';
+
+export type EvidenceKind =
+  | 'import'
+  | 'env'
+  | 'value'
+  | 'call'
+  | 'query'
+  | 'message'
+  | 'route'
+  | 'annotation'
+  | 'unknown';
+
+export interface EvidenceRecord {
+  schemaVersion: 'v1';
+  kind: EvidenceKind;
+  file: string;
+  line?: number;
+  symbol?: string;
+  snippetHash?: string;
+  detail?: string;
+}
+
+export type ReviewLane = 'normal' | 'low_confidence';
+
 export interface AstInferenceSignal {
   hint: string;
   evidence: string;
+  evidences?: EvidenceRecord[];
+  relationType?: AstRelationType;
+  relationTypeHint?: AstRelationType;
+  symbol?: string;
+  scoreVersion?: string;
+  reviewLane?: ReviewLane;
+  tags?: string[];
   confidence?: number;
 }
 
@@ -16,17 +55,20 @@ export interface AstParseResult {
 }
 
 export interface AstExtractedSignal extends AstInferenceSignal {
-  relationTypeHint?: string;
+  relationTypeHint?: AstRelationType;
   symbol?: string;
 }
 
 export interface AstNormalizedSignal extends AstExtractedSignal {
   confidence: number;
+  scoreVersion: string;
+  reviewLane: ReviewLane;
+  evidences: EvidenceRecord[];
   tags?: string[];
 }
 
 export interface AstEmittedSignal extends AstInferenceSignal {
-  relationType?: string;
+  relationType?: AstRelationType;
   confidence?: number;
   pluginId?: string;
 }

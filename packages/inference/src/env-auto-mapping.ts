@@ -1,14 +1,51 @@
 import type { Octokit } from 'octokit';
 import { getOctokit, type RepoInfo } from '@archi-navi/config';
 import { extractSignalsWithPlugins } from './plugins';
+import type { AstRelationType, EvidenceRecord, ReviewLane } from './plugins/types';
+import {
+    combineConfidence,
+    CONFIDENCE_SCORE_VERSION,
+    deriveReviewLane,
+    makeEvidenceRecord,
+    stringifyEvidenceRecord,
+} from './plugins/utils';
 
 export interface MappingCandidate {
     fromId: string;
     toId: string;
-    type: string;
+    type: AstRelationType;
     source: 'inference';
     confidence: number;
     evidence: string;
+    scoreVersion: string;
+    reviewLane: ReviewLane;
+    tags: string[];
+    evidences: EvidenceRecord[];
+}
+
+export type InferenceMode = 'full' | 'fallback' | 'disabled';
+
+export interface InferenceOptions {
+    astPluginsEnabled?: boolean;
+    fallbackEnabled?: boolean;
+}
+
+export interface InferenceMetrics {
+    mode: InferenceMode;
+    repoCount: number;
+    configFilesScanned: number;
+    sourceFilesScanned: number;
+    candidateCount: number;
+    lowConfidenceCount: number;
+    avgConfidence: number;
+    failures: number;
+    durationMs: number;
+    throughputPerSec: number;
+}
+
+export interface InferenceResult {
+    candidates: MappingCandidate[];
+    metrics: InferenceMetrics;
 }
 
 interface PatternRow {
@@ -43,6 +80,14 @@ const ENV_PLACEHOLDER_REGEXES = [
     /System\.getenv\(["']([A-Za-z0-9_.-]+)["']\)/g,
     /@Value\(["']\$\{([A-Za-z0-9_.-]+)(?::[^}]*)?\}["']\)/g,
 ];
+
+const RELATION_TYPES: AstRelationType[] = ['call', 'expose', 'read', 'write', 'produce', 'consume', 'depend_on'];
+
+function normalizeRelationType(input?: string | null): AstRelationType {
+    const value = (input || '').trim().toLowerCase() as AstRelationType;
+    if (RELATION_TYPES.includes(value)) return value;
+    return 'depend_on';
+}
 
 function tokenize(raw: string): string[] {
     return raw
@@ -89,6 +134,12 @@ function inferTargetProjectId(
     return best ? best.id : null;
 }
 
+function resolveInferenceMode(options: Required<InferenceOptions>): InferenceMode {
+    if (options.astPluginsEnabled) return 'full';
+    if (options.fallbackEnabled) return 'fallback';
+    return 'disabled';
+}
+
 async function getRepoFilePaths(
     octokit: Octokit,
     owner: string,
@@ -119,17 +170,22 @@ async function getRepoFilePaths(
     return { configPaths, sourcePaths };
 }
 
-async function getBlobContent(octokit: Octokit, owner: string, repo: string, path: string): Promise<string | null> {
+async function getBlobContent(
+    octokit: Octokit,
+    owner: string,
+    repo: string,
+    path: string,
+): Promise<{ content: string | null; failed: boolean }> {
     try {
         const res = await octokit.rest.repos.getContent({ owner, repo, path });
         const content = Array.isArray(res.data) ? null : res.data;
         if (!content || content.type !== 'file' || !content.content || content.size > MAX_BLOB_SIZE) {
-            return null;
+            return { content: null, failed: false };
         }
 
-        return Buffer.from(content.content, 'base64').toString('utf8');
+        return { content: Buffer.from(content.content, 'base64').toString('utf8'), failed: false };
     } catch {
-        return null;
+        return { content: null, failed: true };
     }
 }
 
@@ -159,82 +215,224 @@ export async function inferEnvMappingCandidates(
     repos: RepoInfo[],
     patterns: PatternRow[],
 ): Promise<MappingCandidate[]> {
+    const result = await inferEnvMappingCandidatesWithMetrics(repos, patterns);
+    return result.candidates;
+}
+
+export async function inferEnvMappingCandidatesWithMetrics(
+    repos: RepoInfo[],
+    patterns: PatternRow[],
+    options: InferenceOptions = {},
+): Promise<InferenceResult> {
+    const startedAt = Date.now();
+    const normalizedOptions: Required<InferenceOptions> = {
+        astPluginsEnabled: options.astPluginsEnabled ?? true,
+        fallbackEnabled: options.fallbackEnabled ?? true,
+    };
+    const mode = resolveInferenceMode(normalizedOptions);
+
+    if (mode === 'disabled') {
+        const durationMs = Date.now() - startedAt;
+        return {
+            candidates: [],
+            metrics: {
+                mode,
+                repoCount: repos.length,
+                configFilesScanned: 0,
+                sourceFilesScanned: 0,
+                candidateCount: 0,
+                lowConfidenceCount: 0,
+                avgConfidence: 0,
+                failures: 0,
+                durationMs,
+                throughputPerSec: 0,
+            },
+        };
+    }
+
     const octokit = getOctokit();
     const repoTokens = repos.map((repo) => ({
         id: repo.id,
         tokens: new Set([...tokenize(repo.name), ...tokenize(repo.id)]),
     }));
+    let configFilesScanned = 0;
+    let sourceFilesScanned = 0;
+    let failures = 0;
 
     const candidates = new Map<string, MappingCandidate>();
 
-    for (const repoInfo of repos) {
-        const [owner, repo] = repoInfo.id.split('/');
-        if (!owner || !repo) continue;
+    const upsertCandidate = (input: {
+        fromId: string;
+        toId: string;
+        type?: string | null;
+        evidence: EvidenceRecord;
+        tags?: string[];
+    }) => {
+        const relationType = normalizeRelationType(input.type);
+        const key = `${input.fromId}|${input.toId}|${relationType}`;
+        const existing = candidates.get(key);
 
-        const { configPaths, sourcePaths } = await getRepoFilePaths(octokit, owner, repo, repoInfo.default_branch || 'main');
-        for (const configPath of configPaths) {
-            const content = await getBlobContent(octokit, owner, repo, configPath);
-            if (!content) continue;
-
-            const envHints = extractEnvHints(content);
-            for (const hint of envHints) {
-                const toId = inferTargetProjectId(hint, repoTokens, repoInfo.id);
-                if (!toId) continue;
-
-                const dedupeKey = `${repoInfo.id}|${toId}|unknown`;
-                if (!candidates.has(dedupeKey)) {
-                    candidates.set(dedupeKey, {
-                        fromId: repoInfo.id,
-                        toId,
-                        type: 'unknown',
-                        source: 'inference',
-                        confidence: 0.74,
-                        evidence: `${configPath}:${hint}`,
-                    });
-                }
-            }
-
-            for (const pattern of patterns) {
-                if (!pattern.enabled || !pattern.pattern || !pattern.target_object_urn) continue;
-                if (!content.includes(pattern.pattern)) continue;
-
-                const dedupeKey = `${repoInfo.id}|${pattern.target_object_urn}|${pattern.dependency_type}`;
-                if (!candidates.has(dedupeKey)) {
-                    candidates.set(dedupeKey, {
-                        fromId: repoInfo.id,
-                        toId: pattern.target_object_urn,
-                        type: pattern.dependency_type || 'depend_on',
-                        source: 'inference',
-                        confidence: 0.86,
-                        evidence: `${configPath}:pattern:${pattern.pattern}`,
-                    });
-                }
-            }
+        if (!existing) {
+            const confidence = combineConfidence([input.evidence], relationType);
+            const reviewLane = deriveReviewLane(confidence);
+            candidates.set(key, {
+                fromId: input.fromId,
+                toId: input.toId,
+                type: relationType,
+                source: 'inference',
+                confidence,
+                evidence: stringifyEvidenceRecord(input.evidence),
+                scoreVersion: CONFIDENCE_SCORE_VERSION,
+                reviewLane,
+                tags: Array.from(new Set([
+                    ...(input.tags ?? []),
+                    relationType,
+                    reviewLane,
+                    ...(reviewLane === 'low_confidence' ? ['needs-review'] : []),
+                ])),
+                evidences: [input.evidence],
+            });
+            return;
         }
 
-        for (const sourcePath of sourcePaths) {
-            const content = await getBlobContent(octokit, owner, repo, sourcePath);
-            if (!content) continue;
+        const mergedEvidences = [...existing.evidences, input.evidence];
+        const confidence = combineConfidence(mergedEvidences, relationType);
+        const reviewLane = deriveReviewLane(confidence);
+        existing.confidence = confidence;
+        existing.reviewLane = reviewLane;
+        existing.scoreVersion = CONFIDENCE_SCORE_VERSION;
+        existing.evidences = mergedEvidences;
+        existing.evidence = stringifyEvidenceRecord(mergedEvidences[0]);
+        existing.tags = Array.from(new Set([
+            ...existing.tags,
+            ...(input.tags ?? []),
+            relationType,
+            reviewLane,
+            ...(reviewLane === 'low_confidence' ? ['needs-review'] : []),
+        ]));
+    };
 
-            const signals = extractSignalsWithPlugins({ path: sourcePath, content });
-            for (const signal of signals) {
-                const toId = inferTargetProjectId(signal.hint, repoTokens, repoInfo.id);
-                if (!toId) continue;
+    for (const repoInfo of repos) {
+        try {
+            const [owner, repo] = repoInfo.id.split('/');
+            if (!owner || !repo) continue;
 
-                const dedupeKey = `${repoInfo.id}|${toId}|unknown`;
-                if (!candidates.has(dedupeKey)) {
-                    candidates.set(dedupeKey, {
-                        fromId: repoInfo.id,
-                        toId,
-                        type: 'unknown',
-                        source: 'inference',
-                        confidence: typeof signal.confidence === 'number' ? signal.confidence : 0.62,
-                        evidence: signal.evidence,
-                    });
+            const { configPaths, sourcePaths } = await getRepoFilePaths(
+                octokit,
+                owner,
+                repo,
+                repoInfo.default_branch || 'main',
+            );
+
+            if (normalizedOptions.fallbackEnabled) {
+                for (const configPath of configPaths) {
+                    const blob = await getBlobContent(octokit, owner, repo, configPath);
+                    if (blob.failed) failures += 1;
+                    if (!blob.content) continue;
+                    configFilesScanned += 1;
+
+                    const envHints = extractEnvHints(blob.content);
+                    for (const hint of envHints) {
+                        const toId = inferTargetProjectId(hint, repoTokens, repoInfo.id);
+                        if (!toId) continue;
+                        upsertCandidate({
+                            fromId: repoInfo.id,
+                            toId,
+                            type: 'depend_on',
+                            evidence: makeEvidenceRecord({
+                                kind: 'env',
+                                file: configPath,
+                                symbol: hint,
+                                detail: `env:${hint}`,
+                            }),
+                            tags: ['config'],
+                        });
+                    }
+
+                    for (const pattern of patterns) {
+                        if (!pattern.enabled || !pattern.pattern || !pattern.target_object_urn) continue;
+                        if (!blob.content.includes(pattern.pattern)) continue;
+                        upsertCandidate({
+                            fromId: repoInfo.id,
+                            toId: pattern.target_object_urn,
+                            type: pattern.dependency_type || 'depend_on',
+                            evidence: makeEvidenceRecord({
+                                kind: 'value',
+                                file: configPath,
+                                detail: `pattern:${pattern.pattern}`,
+                            }),
+                            tags: ['pattern'],
+                        });
+                    }
                 }
             }
+
+            if (normalizedOptions.astPluginsEnabled) {
+                for (const sourcePath of sourcePaths) {
+                    const blob = await getBlobContent(octokit, owner, repo, sourcePath);
+                    if (blob.failed) failures += 1;
+                    if (!blob.content) continue;
+                    sourceFilesScanned += 1;
+
+                    const signals = (() => {
+                        try {
+                            return extractSignalsWithPlugins({ path: sourcePath, content: blob.content });
+                        } catch {
+                            failures += 1;
+                            return [];
+                        }
+                    })();
+
+                    for (const signal of signals) {
+                        const toId = inferTargetProjectId(signal.hint, repoTokens, repoInfo.id);
+                        if (!toId) continue;
+                        const evidences = signal.evidences && signal.evidences.length > 0
+                            ? signal.evidences
+                            : [makeEvidenceRecord({ kind: 'unknown', file: sourcePath, detail: signal.evidence })];
+                        const primaryEvidence = evidences[0];
+                        upsertCandidate({
+                            fromId: repoInfo.id,
+                            toId,
+                            type: signal.relationType || signal.relationTypeHint || 'depend_on',
+                            evidence: primaryEvidence,
+                            tags: signal.tags,
+                        });
+                    }
+                }
+            }
+        } catch {
+            failures += 1;
         }
     }
 
-    return [...candidates.values()];
+    const resolvedCandidates = [...candidates.values()];
+    const lowConfidenceCount = resolvedCandidates.filter((candidate) => candidate.reviewLane === 'low_confidence').length;
+    const avgConfidence = resolvedCandidates.length === 0
+        ? 0
+        : Number(
+            (
+                resolvedCandidates.reduce((sum, candidate) => sum + candidate.confidence, 0)
+                / resolvedCandidates.length
+            ).toFixed(3),
+        );
+    const durationMs = Date.now() - startedAt;
+    const throughputPerSec = durationMs > 0
+        ? Number(((resolvedCandidates.length * 1000) / durationMs).toFixed(3))
+        : resolvedCandidates.length;
+
+    return {
+        candidates: resolvedCandidates,
+        metrics: {
+            mode,
+            repoCount: repos.length,
+            configFilesScanned,
+            sourceFilesScanned,
+            candidateCount: resolvedCandidates.length,
+            lowConfidenceCount,
+            avgConfidence,
+            failures,
+            durationMs,
+            throughputPerSec,
+        },
+    };
 }

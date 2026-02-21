@@ -54,7 +54,10 @@
 - 공통 인터페이스 및 파이프라인 실행기 추가 완료
   - `packages/inference/src/plugins/index.ts`
   - `packages/inference/src/plugins/types.ts`
-- 레거시 플러그인(Java/Kotlin, TS/JS, Python)은 `extractSignals` 경로로 동작
+- Java/Kotlin, TS/JS, Python 플러그인이 `parse/extract/normalize/emit` stage를 모두 구현
+- `relation_type` 후보 추출(`call/read/write/produce/consume/expose/depend_on`) 매핑 반영
+- confidence/evidence v1 스키마 및 low-confidence lane 분리 반영
+- 상세 매트릭스: `docs/spec/2026-02-21_ast-plugin-capability-matrix-v1.md`
 
 운영/점검 유틸:
 - `inspectAstPluginCapabilities()`로 플러그인별 stage 구현 상태 조회 가능
@@ -103,23 +106,46 @@
 ## 6. 평가/릴리즈 전략
 
 ## 6.1 오프라인 평가
-- 언어별 골든셋 레포 + 정답 relation 구축
-- 지표: precision, recall, evidence coverage
+- 구현 상태(완료):
+  - 골든셋: `scripts/fixtures/task2-8-golden-set.v0.json`
+  - baseline: `scripts/fixtures/task2-8-benchmark-baseline.v0.json`
+  - 리포트 출력: `scripts/reports/task2-8-benchmark-report.json`
+- 실행 명령:
+  - `pnpm verify:task2-8:benchmark`
+- 지표:
+  - `precision`, `recall`, `evidenceCoverage`, `f1`
+- 품질 게이트(기본값):
+  - `precision >= 0.70`
+  - `recall >= 0.70`
+  - `evidenceCoverage >= 0.95`
+  - baseline 대비 하락폭 `maxDrop <= 0.03`
 
 ## 6.2 점진 적용
-- Shadow mode: 생성만, 반영 없음
-- Feature flag: 워크스페이스 단위 활성화
-- Fallback: 기존 heuristic 경로 유지
+- 구현 상태(완료):
+  - Shadow mode: 생성만 하고 `change_requests` 적재 생략
+  - Feature flag: `workspace_inference_settings` 기반 워크스페이스 제어
+  - Fallback: `ast_plugins_enabled`/`fallback_enabled` 조합으로 선택
+- API:
+  - `POST /api/sync` body 옵션
+    - `workspaceId`
+    - `shadowMode`
+    - `astPluginsEnabled`
+    - `fallbackEnabled`
+- CLI:
+  - `pnpm cli sync --workspace <id> --shadow-mode --no-ast-plugins --no-fallback`
 
 ## 6.3 운영 지표
-- 처리량, 실패율, 평균 confidence
-- 언어별 추론 성공률/승인률
+- 구현 상태(완료):
+  - 추론 실행 단위 메트릭 적재: `inference_run_metrics`
+  - 주요 컬럼:
+    - `mode(full|fallback|disabled)`
+    - `repo_count`, `config_files_scanned`, `source_files_scanned`
+    - `candidate_count`, `low_confidence_count`, `avg_confidence`
+    - `failures`, `duration_ms`, `throughput_per_sec`
 
 ---
 
 ## 7. 다음 실행 순서
 
-1. 공통 AST 인터페이스 계약 리뷰/고정
-2. 플러그인 capability matrix v1 작성
-3. Java/Kotlin -> TS/JS -> Python 순서로 stage 구현 확대
-4. 골든셋 기반 회귀 벤치 자동화
+1. Task 3 패키징/배포 체계(web 산출물 경로 + CLI up 안정화)로 이관
+2. Task 4 회귀/성능 검증 체계와 벤치 리포트 연결

@@ -35,6 +35,8 @@
 ---
 
 ## Task 2. 승인 워크플로우 + 추론 신뢰성 고도화
+상태: **완료 (2026-02-21)**
+
 목표:
 - 승인 전 반영 금지 원칙을 코드/테스트 레벨에서 강제
 
@@ -142,34 +144,34 @@
 - [x] 승인 전 반영 금지 테스트 + evidence 필수 테스트 (T3-3)
 
 ### 2-5. AST 파이프라인 아키텍처 고도화
-- [ ] 공통 AST 인터페이스 정의(`parse -> extract -> normalize -> emit`)
-- [ ] 언어별 파서 어댑터 계약 고정(Java/Kotlin, TS/JS, Python)
-- [ ] 심볼 정규화 규칙 정의(FQN, 모듈 경로, 네임스페이스)
-- [ ] relation 후보 생성 규칙을 `relation_type` 기준으로 매핑
+- [x] 공통 AST 인터페이스 정의(`parse -> extract -> normalize -> emit`)
+- [x] 언어별 파서 어댑터 계약 고정(Java/Kotlin, TS/JS, Python)
+- [x] 심볼 정규화 규칙 정의(FQN, 모듈 경로, 네임스페이스)
+- [x] relation 후보 생성 규칙을 `relation_type` 기준으로 매핑
 
 ### 2-6. 언어별 AST 플러그인 고도화
-- [ ] Java/Kotlin: 컨트롤러/클라이언트 호출, ORM read/write, Kafka produce/consume 추출
-- [ ] TS/JS: HTTP 클라이언트(fetch/axios), ORM/쿼리빌더, 메시징 SDK 호출 추출
-- [ ] Python: FastAPI/Flask 엔드포인트, SQLAlchemy/ORM, 메시지 브로커 호출 추출
-- [ ] 플러그인 capability matrix 문서화(지원/제외/제약)
+- [x] Java/Kotlin: 컨트롤러/클라이언트 호출, ORM read/write, Kafka produce/consume 추출
+- [x] TS/JS: HTTP 클라이언트(fetch/axios), ORM/쿼리빌더, 메시징 SDK 호출 추출
+- [x] Python: FastAPI/Flask 엔드포인트, SQLAlchemy/ORM, 메시지 브로커 호출 추출
+- [x] 플러그인 capability matrix 문서화(지원/제외/제약)
 
 ### 2-7. confidence/evidence 스코어링 체계
-- [ ] 증거 단위 스키마 고정(파일, 라인, 심볼, 스니펫 해시)
-- [ ] 다중 증거 결합 점수 규칙 정의(직접 호출 > 문자열 힌트)
-- [ ] `confidence` 계산식 버전화 및 튜닝 포인트 명시
-- [ ] low-confidence 후보 자동 태깅 및 우선 검토 큐 분리
+- [x] 증거 단위 스키마 고정(파일, 라인, 심볼, 스니펫 해시)
+- [x] 다중 증거 결합 점수 규칙 정의(직접 호출 > 문자열 힌트)
+- [x] `confidence` 계산식 버전화 및 튜닝 포인트 명시
+- [x] low-confidence 후보 자동 태깅 및 우선 검토 큐 분리
 
 ### 2-8. 평가셋/벤치마크
-- [ ] 골든셋(언어별 샘플 레포 + 정답 relation) 구축
-- [ ] 오프라인 평가 지표 정의(precision, recall, evidence coverage)
-- [ ] 품질 게이트 정의(예: precision 기준 미달 시 배포 차단)
-- [ ] 회귀 벤치(플러그인 변경 전/후) 자동 비교 리포트
+- [x] 골든셋(언어별 샘플 레포 + 정답 relation) 구축 (`scripts/fixtures/task2-8-golden-set.v0.json`)
+- [x] 오프라인 평가 지표 정의(precision, recall, evidence coverage) (`scripts/task2-8-inference-benchmark.ts`)
+- [x] 품질 게이트 정의(예: precision 기준 미달 시 배포 차단) (`pnpm verify:task2-8:benchmark`)
+- [x] 회귀 벤치(플러그인 변경 전/후) 자동 비교 리포트 (`scripts/fixtures/task2-8-benchmark-baseline.v0.json` + `scripts/reports/task2-8-benchmark-report.json`)
 
 ### 2-9. 배포 전략(점진 롤아웃)
-- [ ] shadow mode: 생성만 하고 반영하지 않는 관찰 모드 추가
-- [ ] 워크스페이스 단위 feature flag로 AST 플러그인 on/off 제어
-- [ ] 장애 대비 fallback(기존 heuristic 추론) 경로 유지
-- [ ] 추론 파이프라인 운영 지표(처리량/실패율/평균 confidence) 수집
+- [x] shadow mode: 생성만 하고 반영하지 않는 관찰 모드 추가 (`POST /api/sync`, `pnpm cli sync --shadow-mode`)
+- [x] 워크스페이스 단위 feature flag로 AST 플러그인 on/off 제어 (`workspace_inference_settings`)
+- [x] 장애 대비 fallback(기존 heuristic 추론) 경로 유지 (`ast_plugins_enabled`/`fallback_enabled` 조합)
+- [x] 추론 파이프라인 운영 지표(처리량/실패율/평균 confidence) 수집 (`inference_run_metrics`)
 
 ---
 
@@ -242,6 +244,6 @@
 
 ## 4. 즉시 착수 후보 (Next Up)
 
-- [ ] Task 2-1: 승인 큐 API 계약 테스트 케이스 초안
-- [ ] Task 2-5: AST 파이프라인 인터페이스 초안 + 플러그인 capability matrix v0
-- [ ] Task 2-2: 승인 반영 게이트(조회/집계 공통 필터) 강제
+- [ ] Task 3-1: web 산출물 탐색/패키징 경로 확정
+- [ ] Task 3-2: CLI `up` 포트 충돌/헬스체크 보강
+- [ ] Task 3-3: `pnpm pack:check` 기반 배포 산출물 점검 자동화

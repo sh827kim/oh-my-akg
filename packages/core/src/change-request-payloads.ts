@@ -1,6 +1,7 @@
 import type { RelationType } from './project-model';
 
 export type RelationSource = 'manual' | 'scan' | 'inference' | 'rollup';
+export type InferenceReviewTag = 'LOW_CONFIDENCE' | 'NORMAL';
 
 export interface DependencyUpsertPayload {
   fromId: string;
@@ -9,10 +10,14 @@ export interface DependencyUpsertPayload {
   source: RelationSource;
   confidence?: number;
   evidence?: string;
+  scoreVersion?: string;
+  reviewTag?: InferenceReviewTag;
+  tags?: string[];
 }
 
 const RELATION_SOURCES: RelationSource[] = ['manual', 'scan', 'inference', 'rollup'];
 const SOURCES_REQUIRING_SIGNAL = new Set<RelationSource>(['scan', 'inference']);
+const REVIEW_TAGS: InferenceReviewTag[] = ['LOW_CONFIDENCE', 'NORMAL'];
 
 const LEGACY_TO_RELATION: Array<{ pattern: RegExp; relationType: RelationType }> = [
   { pattern: /^(http|https|grpc|rpc|api|rest|feign|client|call)$/i, relationType: 'call' },
@@ -70,6 +75,30 @@ function normalizeEvidence(input: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function normalizeScoreVersion(input: unknown): string | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (typeof input !== 'string') throw new Error('DEP_PAYLOAD_SCORE_VERSION_INVALID');
+  const trimmed = input.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizeReviewTag(input: unknown): InferenceReviewTag | undefined {
+  if (input === undefined || input === null || input === '') return undefined;
+  const value = String(input).trim().toUpperCase() as InferenceReviewTag;
+  if (!REVIEW_TAGS.includes(value)) throw new Error('DEP_PAYLOAD_REVIEW_TAG_INVALID');
+  return value;
+}
+
+function normalizeTags(input: unknown): string[] | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!Array.isArray(input)) throw new Error('DEP_PAYLOAD_TAGS_INVALID');
+  const normalized = input
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter((item) => item.length > 0);
+  if (normalized.length === 0) return undefined;
+  return Array.from(new Set(normalized));
+}
+
 export function parseDependencyUpsertPayload(
   value: unknown,
   options: { defaultSource?: RelationSource } = {},
@@ -91,6 +120,9 @@ export function parseDependencyUpsertPayload(
   );
   const confidence = normalizeConfidence(record.confidence);
   const evidence = normalizeEvidence(record.evidence);
+  const scoreVersion = normalizeScoreVersion(record.scoreVersion);
+  const reviewTag = normalizeReviewTag(record.reviewTag);
+  const tags = normalizeTags(record.tags);
 
   if (SOURCES_REQUIRING_SIGNAL.has(source) && confidence === undefined) {
     throw new Error('DEP_PAYLOAD_CONFIDENCE_REQUIRED');
@@ -106,6 +138,9 @@ export function parseDependencyUpsertPayload(
     source,
     ...(confidence !== undefined ? { confidence } : {}),
     ...(evidence ? { evidence } : {}),
+    ...(scoreVersion ? { scoreVersion } : {}),
+    ...(reviewTag ? { reviewTag } : {}),
+    ...(tags ? { tags } : {}),
   };
 }
 
@@ -116,6 +151,9 @@ export function buildDependencyUpsertPayload(input: {
   source?: string | null;
   confidence?: number | string | null;
   evidence?: string | null;
+  scoreVersion?: string | null;
+  reviewTag?: string | null;
+  tags?: string[] | null;
 }): DependencyUpsertPayload {
   return parseDependencyUpsertPayload({
     fromId: input.fromId,
@@ -124,6 +162,9 @@ export function buildDependencyUpsertPayload(input: {
     source: input.source ?? 'inference',
     confidence: input.confidence,
     evidence: input.evidence,
+    scoreVersion: input.scoreVersion,
+    reviewTag: input.reviewTag,
+    tags: input.tags,
   });
 }
 
