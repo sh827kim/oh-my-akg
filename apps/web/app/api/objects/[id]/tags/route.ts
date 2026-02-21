@@ -63,7 +63,7 @@ export async function POST(req: NextRequest, context: ParamsContext) {
 
     const objectId = await resolveServiceObjectId(projectUrn);
     if (!objectId) {
-      return NextResponse.json({ error: 'project not found' }, { status: 404 });
+      return NextResponse.json({ error: 'service not found' }, { status: 404 });
     }
 
     const tagIdRaw = body.tagId;
@@ -111,7 +111,7 @@ export async function DELETE(req: NextRequest, context: ParamsContext) {
 
     const objectId = await resolveServiceObjectId(projectUrn);
     if (!objectId) {
-      return NextResponse.json({ error: 'project not found' }, { status: 404 });
+      return NextResponse.json({ error: 'service not found' }, { status: 404 });
     }
 
     const tagIdRaw = body.tagId;

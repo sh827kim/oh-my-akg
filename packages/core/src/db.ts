@@ -14,6 +14,47 @@ const PGliteWithAssets = PGlite as unknown as new (
   },
 ) => PGlite;
 
+const LEGACY_TABLE_PATTERNS: ReadonlyArray<{ table: string; regex: RegExp }> = [
+  { table: 'projects', regex: /\b(?:from|join|update|into|delete\s+from)\s+projects\b/i },
+  { table: 'edges', regex: /\b(?:from|join|update|into|delete\s+from)\s+edges\b/i },
+  { table: 'project_tags', regex: /\b(?:from|join|update|into|delete\s+from)\s+project_tags\b/i },
+];
+
+function assertNoLegacyTableAccess(sql: string): void {
+  const matches = LEGACY_TABLE_PATTERNS
+    .filter(({ regex }) => regex.test(sql))
+    .map(({ table }) => table);
+
+  if (matches.length === 0) return;
+
+  const message = `[DB] Legacy table access detected (${matches.join(', ')}). Use objects/object_relations/object_tags only.`;
+  throw new Error(message);
+}
+
+function withLegacyTableGuard(db: PGlite): PGlite {
+  const guarded = db as PGlite & { __legacyGuardInstalled?: boolean };
+
+  if (guarded.__legacyGuardInstalled) {
+    return db;
+  }
+
+  const rawQuery = (db as any).query.bind(db);
+  const rawExec = (db as any).exec.bind(db);
+
+  (db as any).query = async (...args: any[]) => {
+    assertNoLegacyTableAccess(String(args[0] ?? ''));
+    return rawQuery(...args);
+  };
+
+  (db as any).exec = async (...args: any[]) => {
+    assertNoLegacyTableAccess(String(args[0] ?? ''));
+    return rawExec(...args);
+  };
+
+  guarded.__legacyGuardInstalled = true;
+  return db;
+}
+
 function resolveWorkspaceRoot(startDir: string): string {
   let current = startDir;
 
@@ -100,7 +141,7 @@ export const getDb = async () => {
       globalForDb.dbInstance = db;
     }
 
-    return db;
+    return withLegacyTableGuard(db);
   } catch (error) {
     console.error('[DB] Failed to initialize PGlite with filesystem:', error);
     console.warn('[DB] Falling back to IN-MEMORY mode.');
@@ -128,7 +169,7 @@ export const getDb = async () => {
       globalForDb.dbInstance = memDb;
     }
 
-    return memDb;
+    return withLegacyTableGuard(memDb);
   }
 };
 

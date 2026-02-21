@@ -279,14 +279,14 @@ export default function SettingsPage() {
                         Settings
                     </h1>
                     <p className="mt-2 text-muted-foreground">
-                        프로젝트 Type/Tag를 관리하고 아키텍처 계층 순서를 설정합니다.
+                        서비스 Type/Tag를 관리하고 아키텍처 계층 순서를 설정합니다.
                     </p>
                 </div>
 
                 <section className="rounded-xl border border-white/5 bg-black/20 p-6 backdrop-blur-md">
                     <div className="mb-5 flex items-center justify-between">
                         <div>
-                            <h2 className="text-xl font-semibold text-white">Project Types</h2>
+                            <h2 className="text-xl font-semibold text-white">Service Types</h2>
                             <p className="text-xs text-gray-500">Top-down 레이어 순서입니다. 위/아래 버튼으로 순서를 바꾸세요.</p>
                         </div>
                     </div>
@@ -528,7 +528,7 @@ export default function SettingsPage() {
                 title="타입 삭제"
                 description={
                     deleteTypeTarget
-                        ? `"${deleteTypeTarget.name}" 타입을 삭제할까요? 기존 프로젝트 타입은 unknown으로 변경됩니다.`
+                        ? `"${deleteTypeTarget.name}" 타입을 삭제할까요? 기존 서비스 타입은 unknown으로 변경됩니다.`
                         : undefined
                 }
                 destructive
@@ -544,7 +544,7 @@ export default function SettingsPage() {
                 title="태그 삭제"
                 description={
                     deleteTagTarget
-                        ? `"${deleteTagTarget.name}" 태그를 삭제할까요? 프로젝트에 연결된 태그도 함께 제거됩니다.`
+                        ? `"${deleteTagTarget.name}" 태그를 삭제할까요? 서비스에 연결된 태그도 함께 제거됩니다.`
                         : undefined
                 }
                 destructive

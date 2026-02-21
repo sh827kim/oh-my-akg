@@ -20,7 +20,7 @@ async function getContext() {
     LIMIT 30
   `);
 
-  if (res.rows.length === 0) return 'No projects found in the database.';
+  if (res.rows.length === 0) return 'No services found in the database.';
 
   return res.rows
     .map((p) => {
@@ -50,11 +50,11 @@ export async function POST(req: NextRequest) {
     const context = await getContext();
 
     const systemPrompt = `You are an intelligent architecture assistant for the "Archi.Navi" system.
-You have access to the following project inventory (partial list):
+You have access to the following service inventory (partial list):
 
 ${context}
 
-Answer the user's question about the system architecture, dependencies, or specific projects.
+Answer the user's question about the system architecture, dependencies, or specific services.
 If you don't know the answer based on the provided context, admit it.
 Keep answers concise and helpful.
 `;

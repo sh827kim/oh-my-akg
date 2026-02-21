@@ -119,7 +119,7 @@ export default async function GraphPage({ searchParams }: PageProps) {
           <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
             Dependency Graph
           </h1>
-          <p className="text-sm text-muted-foreground">Network visualization of project dependencies</p>
+          <p className="text-sm text-muted-foreground">Network visualization of service dependencies</p>
         </div>
       </div>
       <div className="flex-1 min-h-[600px] overflow-hidden rounded-xl border border-white/10 bg-black/20 shadow-inner relative backdrop-blur-sm">

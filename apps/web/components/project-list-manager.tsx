@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { ViewToggle } from '@/components/view-toggle';
 import { TagManager } from '@/components/tag-manager';
-import { ProjectDetailModal } from '@/components/project-detail-modal';
+import { ServiceDetailModal } from '@/components/project-detail-modal';
 import { CsvExportButton } from '@/components/csv-export-button';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -53,7 +53,7 @@ interface Project {
     tags: Tag[];
 }
 
-interface ProjectListManagerProps {
+interface ServiceListManagerProps {
     initialProjects: Project[];
     availableTags: Tag[];
     projectTypes: ProjectType[];
@@ -70,12 +70,12 @@ function getTypeStyle(type: string, types: ProjectType[]) {
     };
 }
 
-export function ProjectListManager({
+export function ServiceListManager({
     initialProjects,
     availableTags,
     projectTypes,
     viewMode,
-}: ProjectListManagerProps) {
+}: ServiceListManagerProps) {
     const [isEditMode, setIsEditMode] = useState(false);
     const [showHidden, setShowHidden] = useState(false);
     const [projects, setProjects] = useState(initialProjects);
@@ -160,7 +160,7 @@ export function ProjectListManager({
         });
         if (!res.ok) {
             const errorJson = await res.json().catch(() => ({}));
-            throw new Error(errorJson.error || '프로젝트 수정 실패');
+            throw new Error(errorJson.error || '서비스 수정 실패');
         }
         return res.json();
     };
@@ -184,7 +184,7 @@ export function ProjectListManager({
         updateProjectInState(project.id, { type: nextType });
         try {
             await patchProject(project.id, { type: nextType });
-            toast.success('Project type updated');
+            toast.success('Service type updated');
         } catch (error) {
             updateProjectInState(project.id, { type: prevType });
             toast.error(error instanceof Error ? error.message : 'Type update failed');
@@ -298,15 +298,15 @@ export function ProjectListManager({
                     alias: newAlias.trim(),
                     type: newType,
                     visibility: 'VISIBLE',
-                    description: 'Manually added project',
+                    description: 'Manually added service',
                 }),
             });
             const json = await res.json();
-            if (!res.ok) throw new Error(json.error || 'Project creation failed');
+            if (!res.ok) throw new Error(json.error || 'Service creation failed');
 
             const createdProject: Project = {
                 ...json,
-                description: 'Manually added project',
+                description: 'Manually added service',
                 last_seen_at: null,
                 inbound_count: 0,
                 outbound_count: 0,
@@ -318,9 +318,9 @@ export function ProjectListManager({
             setNewRepoName('');
             setNewAlias('');
             setNewType(selectableTypeNames[0]);
-            toast.success('New project added');
+            toast.success('New service added');
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Project creation failed');
+            toast.error(error instanceof Error ? error.message : 'Service creation failed');
         } finally {
             setAddLoading(false);
         }
@@ -339,7 +339,7 @@ export function ProjectListManager({
             setProjects((prev) => prev.filter((project) => project.id !== deleteTarget.id));
             if (selectedProjectId === deleteTarget.id) setSelectedProjectId(null);
             setDeleteTarget(null);
-            toast.success('Project marked as deleted');
+            toast.success('Service marked as deleted');
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Delete failed');
         } finally {
@@ -356,10 +356,10 @@ export function ProjectListManager({
             <div className="mb-8 flex items-center justify-between">
                 <div>
                     <h1 className="bg-gradient-to-r from-white to-gray-400 bg-clip-text text-4xl font-bold tracking-tight text-transparent">
-                        Projects
+                        Services
                     </h1>
                     <p className="mt-2 text-muted-foreground">
-                        Manage repositories, visibility, tags, aliases and synchronization
+                        Manage services, visibility, tags, aliases and synchronization
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -374,7 +374,7 @@ export function ProjectListManager({
                         <Filter className="h-4 w-4" />
                         <span>{showHidden ? 'HIDDEN 포함' : 'HIDDEN 제외'}</span>
                     </button>
-                    <CsvExportButton data={csvRows} filename="projects.csv" />
+                    <CsvExportButton data={csvRows} filename="services.csv" />
                     <button
                         onClick={() => setSyncOpen(true)}
                         className="rounded-md border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10"
@@ -385,12 +385,12 @@ export function ProjectListManager({
                         onClick={() => setAddOpen(true)}
                         className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                     >
-                        Add Project
+                        Add Service
                     </button>
                 </div>
             </div>
 
-            <ProjectDetailModal
+            <ServiceDetailModal
                 project={selectedProject}
                 isOpen={Boolean(selectedProject)}
                 onClose={() => setSelectedProjectId(null)}
@@ -458,14 +458,14 @@ export function ProjectListManager({
                     })}
                     {filteredProjects.length === 0 && (
                         <div className="col-span-full py-12 text-center text-gray-500">
-                            조건에 맞는 프로젝트가 없습니다.
+                            조건에 맞는 서비스가 없습니다.
                         </div>
                     )}
                 </div>
             ) : (
                 <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20 pb-12 backdrop-blur-md">
                     <div className="flex items-center justify-between border-b border-white/10 p-4">
-                        <span className="text-sm text-gray-400">Total {filteredProjects.length} Projects</span>
+                        <span className="text-sm text-gray-400">Total {filteredProjects.length} Services</span>
                         <button
                             onClick={() => setIsEditMode((prev) => !prev)}
                             className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors ${isEditMode
@@ -618,7 +618,7 @@ export function ProjectListManager({
                             {filteredProjects.length === 0 && (
                                 <tr>
                                     <td colSpan={7} className="py-10 text-center text-gray-500">
-                                        조건에 맞는 프로젝트가 없습니다.
+                                        조건에 맞는 서비스가 없습니다.
                                     </td>
                                 </tr>
                             )}
@@ -673,7 +673,7 @@ export function ProjectListManager({
                     <Dialog.Content className="fixed left-1/2 top-1/2 z-[71] w-[520px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-white/10 bg-[#101217] p-5 shadow-2xl focus:outline-none">
                         <Dialog.Title className="flex items-center gap-2 text-lg font-semibold text-white">
                             <PlusCircle className="h-5 w-5" />
-                            Add Project
+                            Add Service
                         </Dialog.Title>
                         <div className="mt-4 space-y-3">
                             <div>
@@ -732,10 +732,10 @@ export function ProjectListManager({
 
             <ConfirmDialog
                 open={Boolean(deleteTarget)}
-                title="프로젝트 삭제"
+                title="서비스 삭제"
                 description={
                     deleteTarget
-                        ? `"${deleteTarget.alias?.trim() || deleteTarget.repo_name}" 프로젝트를 삭제 상태로 전환할까요?`
+                        ? `"${deleteTarget.alias?.trim() || deleteTarget.repo_name}" 서비스를 삭제 상태로 전환할까요?`
                         : undefined
                 }
                 destructive

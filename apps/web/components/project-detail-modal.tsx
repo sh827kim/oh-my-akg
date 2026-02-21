@@ -36,7 +36,7 @@ interface DependenciesResponse {
     outbound: DependencyItem[];
 }
 
-interface ProjectDetailModalProps {
+interface ServiceDetailModalProps {
     project: Project | null;
     isOpen: boolean;
     onClose: () => void;
@@ -51,7 +51,7 @@ function getTypeClass(type: string) {
     return 'bg-gray-500/10 text-gray-400';
 }
 
-export function ProjectDetailModal({ project, isOpen, onClose, tags }: ProjectDetailModalProps) {
+export function ServiceDetailModal({ project, isOpen, onClose, tags }: ServiceDetailModalProps) {
     const [dependenciesByProject, setDependenciesByProject] = useState<Record<string, DependenciesResponse>>({});
     const [depsErrorsByProject, setDepsErrorsByProject] = useState<Record<string, string>>({});
 
@@ -183,7 +183,7 @@ export function ProjectDetailModal({ project, isOpen, onClose, tags }: ProjectDe
                                             <span className="text-sm font-medium text-white">Inbound</span>
                                         </div>
                                         <p className="text-2xl font-bold text-white">{inboundCount}</p>
-                                        <p className="text-xs text-gray-400">Modules depending on this project</p>
+                                        <p className="text-xs text-gray-400">Services depending on this service</p>
                                     </div>
                                     <div className="rounded-lg border border-white/5 bg-white/5 p-4">
                                         <div className="mb-2 flex items-center gap-2">
@@ -191,7 +191,7 @@ export function ProjectDetailModal({ project, isOpen, onClose, tags }: ProjectDe
                                             <span className="text-sm font-medium text-white">Outbound</span>
                                         </div>
                                         <p className="text-2xl font-bold text-white">{outboundCount}</p>
-                                        <p className="text-xs text-gray-400">Dependencies this project uses</p>
+                                        <p className="text-xs text-gray-400">Dependencies this service uses</p>
                                     </div>
                                 </div>
                             </Tabs.Content>

@@ -30,8 +30,8 @@ export async function GET() {
             }))
         );
     } catch (error) {
-        console.error('Failed to fetch project types:', error);
-        return NextResponse.json({ error: 'Failed to fetch project types' }, { status: 500 });
+        console.error('Failed to fetch service types:', error);
+        return NextResponse.json({ error: 'Failed to fetch service types' }, { status: 500 });
     }
 }
 
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
             { status: 201 }
         );
     } catch (error) {
-        console.error('Failed to create project type:', error);
-        return NextResponse.json({ error: 'Failed to create project type' }, { status: 500 });
+        console.error('Failed to create service type:', error);
+        return NextResponse.json({ error: 'Failed to create service type' }, { status: 500 });
     }
 }

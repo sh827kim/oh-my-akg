@@ -36,7 +36,7 @@
 | 요구사항 | 상태 | 근거 |
 |---|---|---|
 | visibility 토글 + hidden 필터 | 완료 | `components/project-list-manager.tsx` |
-| 다중 태그 추가/삭제 | 완료 | `components/tag-manager.tsx`, `app/api/projects/[id]/tags/route.ts` |
+| 다중 태그 추가/삭제 | 완료 | `components/tag-manager.tsx`, `app/api/objects/[id]/tags/route.ts` |
 | 태그 선생성 후 선택 추가 | 완료 | `app/settings/page.tsx`, `components/tag-manager.tsx` |
 | alias 편집/표시/검색 | 완료 | `components/project-list-manager.tsx` |
 | CSV Export | 완료 | `components/csv-export-button.tsx` |
