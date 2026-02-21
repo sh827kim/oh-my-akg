@@ -40,3 +40,5 @@ next-env.d.ts
 /data/**
 /local-only-docs
 **/node_modules
+.next
+**/.next
