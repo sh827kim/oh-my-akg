@@ -70,9 +70,9 @@ export async function GET(_: NextRequest, context: ParamsContext) {
       outbound: outboundResult.rows,
     });
   } catch (error) {
-    console.error('Failed to fetch project dependencies:', error);
+    console.error('Failed to fetch service dependencies:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch project dependencies' },
+      { error: 'Failed to fetch service dependencies' },
       { status: 500 },
     );
   }

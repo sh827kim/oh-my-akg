@@ -58,13 +58,14 @@
 
 - schema apply 후 `pnpm cli status` 정상 동작
 - TypeScript 컴파일 정상
-- `/api/projects`, `/api/change-requests`, `/api/sync` 기본 동작 확인
+- `/api/objects`, `/api/change-requests`, `/api/sync` 기본 동작 확인
 - 그래프/아키텍처 페이지 로딩 확인
 
 ---
 
 ## 5. 후속 작업
 
-- Task 1-2: 기존 데이터 소스에서 object 모델로 백필 자동화
 - Task 1-3: projection/API 최적화 및 쿼리 성능 보강
+- Task 1-4: 레거시 경로 제거 및 접근 차단 가드 적용
+- Task 1-5: 스모크/정합성 자동 검증 스크립트 운영 반영
 - Task 2: 승인 워크플로우/roll-up 로직 정밀화

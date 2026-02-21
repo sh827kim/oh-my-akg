@@ -1,5 +1,5 @@
 import { getDb } from '@archi-navi/core';
-import { ProjectListManager } from '@/components/project-list-manager';
+import { ServiceListManager } from '@/components/project-list-manager';
 import { getProjectStatusFromMetadata, getProjectTypeFromMetadata } from '@archi-navi/core';
 
 interface Tag {
@@ -119,7 +119,7 @@ async function getProjects() {
       };
     });
   } catch (error) {
-    console.error('Failed to fetch projects:', error);
+    console.error('Failed to fetch services:', error);
     return [];
   }
 }
@@ -170,7 +170,7 @@ export default async function Home({
   return (
     <div className="flex-1 overflow-auto p-8">
       <div className="mx-auto max-w-7xl">
-        <ProjectListManager
+        <ServiceListManager
           initialProjects={projects}
           availableTags={settings.availableTags}
           projectTypes={settings.projectTypes}

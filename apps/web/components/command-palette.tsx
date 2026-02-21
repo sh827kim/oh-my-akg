@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Command } from 'cmdk';
 import { Search, Monitor, Server, Database, Boxes } from 'lucide-react';
 
-interface Project {
+interface ServiceItem {
     id: string;
     repo_name: string;
     type: string;
@@ -13,7 +13,7 @@ interface Project {
 
 export function CommandPalette() {
     const [open, setOpen] = useState(false);
-    const [projects, setProjects] = useState<Project[]>([]);
+    const [services, setServices] = useState<ServiceItem[]>([]);
     const router = useRouter();
 
     useEffect(() => {
@@ -32,8 +32,8 @@ export function CommandPalette() {
         if (open) {
             fetch('/api/objects')
                 .then((res) => res.json())
-                .then((data) => setProjects(data))
-                .catch((err) => console.error('Failed to load projects', err));
+                .then((data) => setServices(data))
+                .catch((err) => console.error('Failed to load services', err));
         }
     }, [open]);
 
@@ -52,7 +52,7 @@ export function CommandPalette() {
                 <div className="flex items-center border-b border-white/10 px-3">
                     <Search className="mr-2 h-4 w-4 shrink-0 opacity-50 text-white" />
                     <Command.Input
-                        placeholder="Search projects..."
+                        placeholder="Search services..."
                         className="flex h-12 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-gray-500 text-white"
                     />
                 </div>
@@ -62,29 +62,29 @@ export function CommandPalette() {
                         No results found.
                     </Command.Empty>
 
-                    <Command.Group heading="Projects" className="text-xs font-medium text-gray-500 px-2 py-1.5">
-                        {projects.map((project) => (
+                    <Command.Group heading="Services" className="text-xs font-medium text-gray-500 px-2 py-1.5">
+                        {services.map((service) => (
                             <Command.Item
-                                key={project.id}
+                                key={service.id}
                                 onSelect={() => {
                                     setOpen(false);
-                                    // Update URL to filter by this project name
-                                    router.push(`/?q=${project.repo_name}`);
+                                    // Update URL to filter by this service name
+                                    router.push(`/?q=${service.repo_name}`);
                                 }}
                                 className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-300 aria-selected:bg-primary/20 aria-selected:text-white cursor-pointer"
                             >
-                                <div className={`flex h-6 w-6 items-center justify-center rounded border border-white/10 ${project.type === 'frontend' ? 'bg-blue-500/10 text-blue-400' :
-                                        project.type === 'backend' ? 'bg-green-500/10 text-green-400' :
-                                            project.type === 'middleware' ? 'bg-amber-500/10 text-amber-400' :
+                                <div className={`flex h-6 w-6 items-center justify-center rounded border border-white/10 ${service.type === 'frontend' ? 'bg-blue-500/10 text-blue-400' :
+                                        service.type === 'backend' ? 'bg-green-500/10 text-green-400' :
+                                            service.type === 'middleware' ? 'bg-amber-500/10 text-amber-400' :
                                                 'bg-red-500/10 text-red-400'
                                     }`}>
-                                    {project.type === 'frontend' ? <Monitor className="h-3 w-3" /> :
-                                        project.type === 'backend' ? <Server className="h-3 w-3" /> :
-                                            project.type === 'database' ? <Database className="h-3 w-3" /> :
+                                    {service.type === 'frontend' ? <Monitor className="h-3 w-3" /> :
+                                        service.type === 'backend' ? <Server className="h-3 w-3" /> :
+                                            service.type === 'database' ? <Database className="h-3 w-3" /> :
                                                 <Boxes className="h-3 w-3" />}
                                 </div>
-                                <span>{project.repo_name}</span>
-                                <span className="ml-auto text-xs text-gray-500">{project.type}</span>
+                                <span>{service.repo_name}</span>
+                                <span className="ml-auto text-xs text-gray-500">{service.type}</span>
                             </Command.Item>
                         ))}
                     </Command.Group>

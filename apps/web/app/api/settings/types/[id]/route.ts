@@ -62,7 +62,7 @@ export async function PATCH(req: NextRequest, context: ParamsContext) {
         );
 
         if (result.rows.length === 0) {
-            return NextResponse.json({ error: 'project type not found' }, { status: 404 });
+            return NextResponse.json({ error: 'service type not found' }, { status: 404 });
         }
 
         const row = result.rows[0];
@@ -74,8 +74,8 @@ export async function PATCH(req: NextRequest, context: ParamsContext) {
             enabled: row.enabled,
         });
     } catch (error) {
-        console.error('Failed to update project type:', error);
-        return NextResponse.json({ error: 'Failed to update project type' }, { status: 500 });
+        console.error('Failed to update service type:', error);
+        return NextResponse.json({ error: 'Failed to update service type' }, { status: 500 });
     }
 }
 
@@ -94,7 +94,7 @@ export async function DELETE(_: NextRequest, context: ParamsContext) {
             [typeId]
         );
         if (typeRes.rows.length === 0) {
-            return NextResponse.json({ error: 'project type not found' }, { status: 404 });
+            return NextResponse.json({ error: 'service type not found' }, { status: 404 });
         }
 
         const typeName = typeRes.rows[0].name;
@@ -120,7 +120,7 @@ export async function DELETE(_: NextRequest, context: ParamsContext) {
 
         return NextResponse.json({ success: true });
     } catch (error) {
-        console.error('Failed to delete project type:', error);
-        return NextResponse.json({ error: 'Failed to delete project type' }, { status: 500 });
+        console.error('Failed to delete service type:', error);
+        return NextResponse.json({ error: 'Failed to delete service type' }, { status: 500 });
     }
 }

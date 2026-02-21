@@ -18,13 +18,15 @@
 ## 1. 큰 Task 로드맵
 
 ## Task 1. Core 도메인/데이터 모델 전환 완성
+상태: **완료 (2026-02-21)**
+
 목표:
 - `projects/edges` 중심 구현을 `objects/object_relations/object_tags` 중심으로 전환
 
 핵심 산출물:
-- 전환 마이그레이션 SQL + 백필 스크립트
+- 전환 마이그레이션 SQL
 - Object/Relation 기준 API 경로 및 서비스 레이어
-- 레거시 경로 제거 또는 호환 레이어 명시
+- 레거시 경로 제거
 
 완료 기준:
 - 신규/수정 데이터가 `objects` + `object_relations`만을 소스로 동작
@@ -91,24 +93,29 @@
 - [x] 인덱스/유니크/FK 제약을 스펙 기준으로 고정
 - [x] 롤백 가능한 마이그레이션 전략 확정
 
-### 1-2. 데이터 백필
-- [ ] 기존 `projects/edges/tags` -> 신규 모델 매핑 테이블 정의
-- [ ] 백필 스크립트 작성 및 샘플 데이터 검증
-- [ ] 백필 중 충돌 규칙(중복/누락/이름 충돌) 정의
-
 ### 1-3. API/서비스 전환
 - [x] Object/Relation/Tag API를 신규 모델로 전환
 - [x] Service List/Architecture/Object Mapping 조회 쿼리 전환
 - [x] 레거시 API 경로 사용처 제거 또는 어댑터 최소화
+- [x] 구 API 경로 제거 및 `/api/objects` 단일 경로 고정
 
 ### 1-4. 레거시 정리
-- [ ] 코드 내 `projects/edges` 직접 의존 구간 제거
-- [ ] 레거시 테이블/필드 접근 경고 또는 비활성화
-- [ ] 전환 후 운영 위험 항목 체크리스트 작성
+- [x] 코드 내 `projects/edges` 직접 의존 구간 제거
+- [x] 레거시 테이블/필드 접근 경고 또는 비활성화
+- [x] 전환 후 운영 위험 항목 체크리스트 작성 (`docs/tasks/2026-02-21_task1-4-legacy-risk-checklist.md`)
 
 ### 1-5. 검증
-- [ ] 모델 전환 스모크 테스트(조회/수정/태그/가시성)
-- [ ] 데이터 정합성 점검 스크립트(카운트/무결성)
+- [x] 모델 전환 스모크 테스트(조회/수정/태그/가시성) (`scripts/task1-5-smoke-test.ts`)
+- [x] 데이터 정합성 점검 스크립트(카운트/무결성) (`scripts/check-object-model-integrity.ts`)
+
+### 1-6. 용어/네이밍 정리 (추가)
+- [x] UI/컴포넌트/메시지의 `project` 용어를 `service`/`object` 기준으로 일관화
+- [x] API/문서 예시에서 구 경로 제거 최종 점검
+- [x] CSV/검색 placeholder 등 사용자 노출 텍스트 정합성 점검
+
+### Task 1 완료 요약
+- [x] Core 모델 전환(1-1 ~ 1-6) 완료
+- [x] 레거시 경로 제거 + 접근 차단 + 검증 스크립트 반영
 
 ---
 
@@ -235,7 +242,6 @@
 
 ## 4. 즉시 착수 후보 (Next Up)
 
-- [ ] Task 1-1: 스키마 정렬(현행 schema와 SPEC diff 확정)
-- [ ] Task 1-2: 백필 매핑 규칙 문서/스크립트 초안
 - [ ] Task 2-1: 승인 큐 API 계약 테스트 케이스 초안
 - [ ] Task 2-5: AST 파이프라인 인터페이스 초안 + 플러그인 capability matrix v0
+- [ ] Task 2-2: 승인 반영 게이트(조회/집계 공통 필터) 강제

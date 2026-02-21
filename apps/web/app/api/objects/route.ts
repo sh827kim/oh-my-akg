@@ -30,7 +30,7 @@ function normalizeRepoId(repoName: string) {
     .replace(/[^a-z0-9._/-]+/g, '-')
     .replace(/\/+/g, '/')
     .replace(/^-+|-+$/g, '');
-  return normalized || `project-${Date.now()}`;
+  return normalized || `service-${Date.now()}`;
 }
 
 function toProjectRow(row: ServiceObjectRow): ProjectRow {
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(result.rows.map(toProjectRow));
   } catch (error) {
-    console.error('Failed to fetch projects:', error);
+    console.error('Failed to fetch services:', error);
     return NextResponse.json([], { status: 500 });
   }
 }
@@ -136,8 +136,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(toProjectRow(result.rows[0]), { status: 201 });
   } catch (error) {
-    console.error('Failed to create project:', error);
-    return NextResponse.json({ error: 'Failed to create project' }, { status: 500 });
+    console.error('Failed to create service:', error);
+    return NextResponse.json({ error: 'Failed to create service' }, { status: 500 });
   }
 }
 
@@ -166,7 +166,7 @@ export async function PATCH(req: NextRequest) {
     );
 
     if (existingRes.rows.length === 0) {
-      return NextResponse.json({ error: 'project not found' }, { status: 404 });
+      return NextResponse.json({ error: 'service not found' }, { status: 404 });
     }
 
     const existing = existingRes.rows[0];
@@ -212,8 +212,8 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json(toProjectRow(result.rows[0]));
   } catch (error) {
-    console.error('Failed to update project:', error);
-    return NextResponse.json({ error: 'Failed to update project' }, { status: 500 });
+    console.error('Failed to update service:', error);
+    return NextResponse.json({ error: 'Failed to update service' }, { status: 500 });
   }
 }
 
@@ -238,7 +238,7 @@ export async function DELETE(req: NextRequest) {
 
     const existing = existingRes.rows[0];
     if (!existing) {
-      return NextResponse.json({ error: 'project not found' }, { status: 404 });
+      return NextResponse.json({ error: 'service not found' }, { status: 404 });
     }
 
     const metadata = buildServiceMetadata({
@@ -258,7 +258,7 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Failed to delete project:', error);
-    return NextResponse.json({ error: 'Failed to delete project' }, { status: 500 });
+    console.error('Failed to delete service:', error);
+    return NextResponse.json({ error: 'Failed to delete service' }, { status: 500 });
   }
 }

@@ -91,7 +91,7 @@ export function ArchitectureGraph({
 
                 if (!res.ok) {
                     const errorJson = await res.json().catch(() => ({}));
-                    throw new Error(errorJson.error || 'Failed to hide project');
+                    throw new Error(errorJson.error || 'Failed to hide service');
                 }
 
                 setGraphData((prev) => ({
@@ -108,10 +108,10 @@ export function ArchitectureGraph({
                     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
                 }
 
-                toast.success('프로젝트를 숨김 처리했습니다.');
+                toast.success('서비스를 숨김 처리했습니다.');
             } catch (error) {
                 console.error(error);
-                toast.error(error instanceof Error ? error.message : '프로젝트 숨김 처리에 실패했습니다.');
+                toast.error(error instanceof Error ? error.message : '서비스 숨김 처리에 실패했습니다.');
             } finally {
                 setIsHiding(false);
             }
@@ -395,7 +395,7 @@ export function ArchitectureGraph({
 
             {isHiding && (
                 <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 text-sm text-white">
-                    프로젝트 숨김 처리 중...
+                    서비스 숨김 처리 중...
                 </div>
             )}
 
@@ -407,10 +407,10 @@ export function ArchitectureGraph({
 
             <ConfirmDialog
                 open={Boolean(hideTarget)}
-                title="프로젝트 숨김"
+                title="서비스 숨김"
                 description={
                     hideTarget
-                        ? `"${hideTarget.label}" 프로젝트를 숨김(HIDDEN) 처리할까요? 그래프/아키텍처 뷰에서 즉시 제외됩니다.`
+                        ? `"${hideTarget.label}" 서비스를 숨김(HIDDEN) 처리할까요? 그래프/아키텍처 뷰에서 즉시 제외됩니다.`
                         : undefined
                 }
                 destructive

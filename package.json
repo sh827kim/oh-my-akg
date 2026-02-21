@@ -40,6 +40,9 @@
     "lint:web": "pnpm --filter @archi-navi/web lint",
     "cli": "pnpm --filter @archi-navi/cli dev",
     "cli:pkg": "pnpm --filter @archi-navi/cli dev",
+    "verify:legacy-sql": "ts-node -P tsconfig.scripts.json scripts/check-no-legacy-table-usage.ts",
+    "verify:task1-5:smoke": "ts-node -P tsconfig.scripts.json scripts/task1-5-smoke-test.ts",
+    "verify:task1-5:integrity": "ts-node -P tsconfig.scripts.json scripts/check-object-model-integrity.ts",
     "ws:list": "pnpm -r list --depth -1",
     "pack:check": "npm_config_cache=.npm-cache npm pack --dry-run"
   },
