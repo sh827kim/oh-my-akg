@@ -22,11 +22,13 @@ export const approvalsCommand = new Command('approvals')
       .description('List change requests')
       .option('--status <status>', 'PENDING|APPROVED|REJECTED', 'PENDING')
       .option('--limit <limit>', 'max rows', '100')
+      .option('-w, --workspace <workspaceId>', 'workspace id (default: default)')
       .action(async (options) => {
         const db = await getDb();
         const status = (options.status || 'PENDING').toUpperCase() as ChangeRequestStatus;
         const limit = Number(options.limit || '100');
-        const rows = await listChangeRequests(db, status, Number.isFinite(limit) ? limit : 100);
+        const workspaceId = typeof options.workspace === 'string' ? options.workspace : undefined;
+        const rows = await listChangeRequests(db, status, Number.isFinite(limit) ? limit : 100, { workspaceId });
 
         if (rows.length === 0) {
           console.log('No change requests found.');
@@ -47,6 +49,7 @@ export const approvalsCommand = new Command('approvals')
       .option('--exclude <ids>', 'exclude ids when used with --all')
       .option('--reviewed-by <actor>', 'review actor for audit fields', 'cli')
       .option('--dry-run', 'preview only, do not apply', false)
+      .option('-w, --workspace <workspaceId>', 'workspace id (default: default)')
       .action(async (options) => {
         const db = await getDb();
         const nextStatus = (options.status || 'APPROVED').toUpperCase() as 'APPROVED' | 'REJECTED';
@@ -56,10 +59,12 @@ export const approvalsCommand = new Command('approvals')
           process.exit(1);
         }
 
+        const workspaceId = typeof options.workspace === 'string' ? options.workspace : undefined;
+
         let ids = parseIdList(options.ids);
         if (options.all) {
           const exclude = parseIdList(options.exclude);
-          ids = await listPendingIds(db, exclude);
+          ids = await listPendingIds(db, exclude, { workspaceId });
         }
 
         if (ids.length === 0) {
@@ -76,7 +81,7 @@ export const approvalsCommand = new Command('approvals')
           return;
         }
 
-        const summary = await applyBulkChangeRequests(db, ids, nextStatus, { reviewedBy });
+        const summary = await applyBulkChangeRequests(db, ids, nextStatus, { reviewedBy, workspaceId });
         console.log(`Processed=${summary.processed} Succeeded=${summary.succeeded} Failed=${summary.failed.length}`);
         for (const fail of summary.failed) {
           console.log(`  - id=${fail.id} reason=${fail.reason}`);

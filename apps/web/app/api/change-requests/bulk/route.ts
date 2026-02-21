@@ -8,6 +8,7 @@ export async function POST(req: NextRequest) {
     const status = (body?.status || 'APPROVED') as 'APPROVED' | 'REJECTED';
     const reviewedBy = typeof body?.reviewedBy === 'string' ? body.reviewedBy.trim() : '';
     const all = Boolean(body?.all);
+    const workspaceId = typeof body?.workspaceId === 'string' ? body.workspaceId : undefined;
     const ids = Array.isArray(body?.ids)
       ? body.ids.map((id: unknown) => Number(id)).filter((id: number) => Number.isInteger(id) && id > 0)
       : [];
@@ -20,13 +21,13 @@ export async function POST(req: NextRequest) {
     }
 
     const db = await getDb();
-    const targetIds = all ? await listPendingIds(db, excludeIds) : ids;
+    const targetIds = all ? await listPendingIds(db, excludeIds, { workspaceId }) : ids;
 
     if (targetIds.length === 0) {
       return NextResponse.json({ error: 'No target ids' }, { status: 400 });
     }
 
-    const summary = await applyBulkChangeRequests(db, targetIds, status, { reviewedBy });
+    const summary = await applyBulkChangeRequests(db, targetIds, status, { reviewedBy, workspaceId });
     return NextResponse.json(summary);
   } catch (error) {
     console.error('Failed to process bulk change requests:', error);
