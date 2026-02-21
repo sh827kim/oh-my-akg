@@ -5,7 +5,6 @@ export type ChangeRequestType = 'RELATION_UPSERT' | 'RELATION_DELETE' | 'OBJECT_
 
 import {
   parseDependencyUpsertPayload,
-  isDependencyUpsertPayload,
   type DependencyUpsertPayload,
   type RelationSource,
 } from './change-request-payloads';
@@ -30,8 +29,6 @@ const CHANGE_REQUEST_STATUSES: ChangeRequestStatus[] = ['PENDING', 'APPROVED', '
 const CHANGE_REQUEST_SOURCES: RelationSource[] = ['manual', 'scan', 'inference'];
 
 function asDependencyPayload(payload: unknown, defaultSource: RelationSource = 'manual'): DependencyUpsertPayload | null {
-  if (isDependencyUpsertPayload(payload)) return payload;
-
   try {
     return parseDependencyUpsertPayload(payload, { defaultSource });
   } catch {
