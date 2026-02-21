@@ -6,6 +6,8 @@ export interface MappingCandidate {
     fromId: string;
     toId: string;
     type: string;
+    source: 'inference';
+    confidence: number;
     evidence: string;
 }
 
@@ -185,6 +187,8 @@ export async function inferEnvMappingCandidates(
                         fromId: repoInfo.id,
                         toId,
                         type: 'unknown',
+                        source: 'inference',
+                        confidence: 0.74,
                         evidence: `${configPath}:${hint}`,
                     });
                 }
@@ -200,6 +204,8 @@ export async function inferEnvMappingCandidates(
                         fromId: repoInfo.id,
                         toId: pattern.target_object_urn,
                         type: pattern.dependency_type || 'depend_on',
+                        source: 'inference',
+                        confidence: 0.86,
                         evidence: `${configPath}:pattern:${pattern.pattern}`,
                     });
                 }
@@ -221,6 +227,8 @@ export async function inferEnvMappingCandidates(
                         fromId: repoInfo.id,
                         toId,
                         type: 'unknown',
+                        source: 'inference',
+                        confidence: typeof signal.confidence === 'number' ? signal.confidence : 0.62,
                         evidence: signal.evidence,
                     });
                 }

@@ -36,11 +36,10 @@ export async function GET(_: NextRequest, context: ParamsContext) {
            o_from.urn AS project_id,
            COALESCE(NULLIF(o_from.display_name, ''), o_from.name) AS label,
            r.relation_type AS type
-         FROM object_relations r
+         FROM approved_object_relations r
          JOIN objects o_from ON o_from.id = r.subject_object_id
          WHERE r.workspace_id = 'default'
            AND r.target_object_id = $1
-           AND r.approved = TRUE
            AND o_from.object_type = 'service'
            AND o_from.visibility = 'VISIBLE'
            AND COALESCE(o_from.metadata->>'status', 'ACTIVE') = 'ACTIVE'
@@ -52,11 +51,10 @@ export async function GET(_: NextRequest, context: ParamsContext) {
            o_to.urn AS project_id,
            COALESCE(NULLIF(o_to.display_name, ''), o_to.name) AS label,
            r.relation_type AS type
-         FROM object_relations r
+         FROM approved_object_relations r
          JOIN objects o_to ON o_to.id = r.target_object_id
          WHERE r.workspace_id = 'default'
            AND r.subject_object_id = $1
-           AND r.approved = TRUE
            AND o_to.object_type = 'service'
            AND o_to.visibility = 'VISIBLE'
            AND COALESCE(o_to.metadata->>'status', 'ACTIVE') = 'ACTIVE'

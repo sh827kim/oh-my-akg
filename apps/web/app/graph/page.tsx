@@ -62,11 +62,10 @@ async function getGraphData() {
       o_from.urn AS source,
       o_to.urn AS target,
       r.relation_type AS type
-    FROM object_relations r
+    FROM approved_object_relations r
     JOIN objects o_from ON o_from.id = r.subject_object_id
     JOIN objects o_to ON o_to.id = r.target_object_id
     WHERE r.workspace_id = 'default'
-      AND r.approved = TRUE
       AND o_from.object_type = 'service'
       AND o_to.object_type = 'service'
       AND o_from.visibility = 'VISIBLE'
