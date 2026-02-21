@@ -12,13 +12,14 @@ export async function PATCH(req: NextRequest, context: ParamsContext) {
     const body = await req.json();
     const nextStatus = body?.status as 'APPROVED' | 'REJECTED';
     const reviewedBy = typeof body?.reviewedBy === 'string' ? body.reviewedBy.trim() : '';
+    const workspaceId = typeof body?.workspaceId === 'string' ? body.workspaceId : undefined;
 
     if (!['APPROVED', 'REJECTED'].includes(nextStatus)) {
       return NextResponse.json({ error: 'status must be APPROVED or REJECTED' }, { status: 400 });
     }
 
     const db = await getDb();
-    const item = await applyChangeRequest(db, Number(id), nextStatus, { reviewedBy });
+    const item = await applyChangeRequest(db, Number(id), nextStatus, { reviewedBy, workspaceId });
     return NextResponse.json({ item });
   } catch (error) {
     if (error instanceof Error && error.message === 'CHANGE_REQUEST_NOT_FOUND') {

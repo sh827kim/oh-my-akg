@@ -208,6 +208,37 @@ CREATE TABLE IF NOT EXISTS auto_mapping_patterns (
   UNIQUE (pattern, target_object_urn)
 );
 
+CREATE TABLE IF NOT EXISTS workspace_inference_settings (
+  workspace_id TEXT PRIMARY KEY,
+  ast_plugins_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  shadow_mode_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  fallback_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS inference_run_metrics (
+  id SERIAL PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  mode TEXT NOT NULL,
+  shadow_mode BOOLEAN NOT NULL DEFAULT FALSE,
+  ast_plugins_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  fallback_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  repo_count INTEGER NOT NULL DEFAULT 0,
+  config_files_scanned INTEGER NOT NULL DEFAULT 0,
+  source_files_scanned INTEGER NOT NULL DEFAULT 0,
+  candidate_count INTEGER NOT NULL DEFAULT 0,
+  low_confidence_count INTEGER NOT NULL DEFAULT 0,
+  avg_confidence NUMERIC(4,3) NOT NULL DEFAULT 0,
+  failures INTEGER NOT NULL DEFAULT 0,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  throughput_per_sec NUMERIC(10,3) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT inference_run_metrics_mode_check CHECK (mode IN ('full', 'fallback', 'disabled'))
+);
+
+CREATE INDEX IF NOT EXISTS inference_run_metrics_workspace_created_idx
+  ON inference_run_metrics (workspace_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS schema_migrations (
   id TEXT PRIMARY KEY,
   applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP

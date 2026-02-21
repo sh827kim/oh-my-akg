@@ -44,6 +44,8 @@
     "verify:task1-5:smoke": "ts-node -P tsconfig.scripts.json scripts/task1-5-smoke-test.ts",
     "verify:task1-5:integrity": "ts-node -P tsconfig.scripts.json scripts/check-object-model-integrity.ts",
     "verify:task2-4:approval-gate": "ts-node -P tsconfig.scripts.json scripts/task2-4-approval-gate-test.ts",
+    "verify:task2-7:inference": "ts-node -P tsconfig.scripts.json scripts/task2-7-inference-pipeline-test.ts",
+    "verify:task2-8:benchmark": "ts-node -P tsconfig.scripts.json scripts/task2-8-inference-benchmark.ts",
     "ws:list": "pnpm -r list --depth -1",
     "pack:check": "npm_config_cache=.npm-cache npm pack --dry-run"
   },

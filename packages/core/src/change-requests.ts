@@ -24,6 +24,10 @@ interface DbLike {
   query: <T = unknown>(sql: string, params?: unknown[]) => Promise<{ rows: T[] }>;
 }
 
+interface WorkspaceScopedOptions {
+  workspaceId?: string | null;
+}
+
 const CHANGE_REQUEST_TYPES: ChangeRequestType[] = ['RELATION_UPSERT', 'RELATION_DELETE', 'OBJECT_PATCH'];
 const CHANGE_REQUEST_STATUSES: ChangeRequestStatus[] = ['PENDING', 'APPROVED', 'REJECTED'];
 const CHANGE_REQUEST_SOURCES: RelationSource[] = ['manual', 'scan', 'inference'];
@@ -39,6 +43,11 @@ function asDependencyPayload(payload: unknown, defaultSource: RelationSource = '
 function normalizeActor(input: string | null | undefined, fallback: string): string {
   const value = (input || '').trim();
   return value.length > 0 ? value : fallback;
+}
+
+function normalizeWorkspaceId(input: string | null | undefined): string {
+  const value = (input || '').trim();
+  return value.length > 0 ? value : 'default';
 }
 
 function parseChangeRequestType(input: unknown): ChangeRequestType {
@@ -63,15 +72,47 @@ function assertAllowedChangeRequestSource(source: RelationSource): void {
   }
 }
 
-async function resolveServiceObjectId(db: DbLike, urn: string): Promise<string | null> {
+function buildEvidenceEnvelope(payload: DependencyUpsertPayload): Array<Record<string, unknown>> {
+  if (!payload.evidence) return [];
+
+  if (payload.evidence.startsWith('v1|')) {
+    const [schemaVersion, kind, file, lineRaw, symbol, snippetHash, detail] = payload.evidence.split('|');
+    const line = Number(lineRaw);
+
+    return [{
+      schemaVersion,
+      kind: kind || payload.source,
+      file: file || '',
+      ...(Number.isFinite(line) ? { line } : {}),
+      ...(symbol ? { symbol } : {}),
+      ...(snippetHash ? { snippetHash } : {}),
+      ...(detail ? { detail } : {}),
+      ...(payload.scoreVersion ? { scoreVersion: payload.scoreVersion } : {}),
+      ...(payload.reviewTag ? { reviewTag: payload.reviewTag } : {}),
+      ...(payload.tags ? { tags: payload.tags } : {}),
+      source: payload.source,
+    }];
+  }
+
+  return [{
+    schemaVersion: 'legacy',
+    kind: payload.source,
+    value: payload.evidence,
+    ...(payload.scoreVersion ? { scoreVersion: payload.scoreVersion } : {}),
+    ...(payload.reviewTag ? { reviewTag: payload.reviewTag } : {}),
+    ...(payload.tags ? { tags: payload.tags } : {}),
+  }];
+}
+
+async function resolveServiceObjectId(db: DbLike, workspaceId: string, urn: string): Promise<string | null> {
   const result = await db.query<{ id: string }>(
     `SELECT id
      FROM objects
-     WHERE workspace_id = 'default'
+     WHERE workspace_id = $1
        AND object_type = 'service'
-       AND urn = $1
+       AND urn = $2
      LIMIT 1`,
-    [urn],
+    [workspaceId, urn],
   );
   return result.rows[0]?.id ?? null;
 }
@@ -80,16 +121,18 @@ export async function listChangeRequests(
   db: DbLike,
   status: ChangeRequestStatus = 'PENDING',
   limit = 200,
+  options: WorkspaceScopedOptions = {},
 ): Promise<ChangeRequestRow[]> {
   const normalizedStatus = parseChangeRequestStatus(status);
+  const workspaceId = normalizeWorkspaceId(options.workspaceId);
   const result = await db.query<ChangeRequestRow>(
     `SELECT id, request_type, payload, status, requested_by, reviewed_by, created_at, reviewed_at
      FROM change_requests
-     WHERE workspace_id = 'default'
-       AND status = $1
+     WHERE workspace_id = $1
+       AND status = $2
      ORDER BY created_at ASC, id ASC
-     LIMIT $2`,
-    [normalizedStatus, limit],
+     LIMIT $3`,
+    [workspaceId, normalizedStatus, limit],
   );
 
   return result.rows;
@@ -101,10 +144,12 @@ export async function createChangeRequest(
     requestType: ChangeRequestType | string;
     payload: unknown;
     requestedBy?: string | null;
+    workspaceId?: string | null;
   },
 ): Promise<ChangeRequestRow> {
   const requestType = parseChangeRequestType(input.requestType);
   const requestedBy = normalizeActor(input.requestedBy, 'system');
+  const workspaceId = normalizeWorkspaceId(input.workspaceId);
 
   let payload = input.payload;
   if (requestType === 'RELATION_UPSERT' || requestType === 'RELATION_DELETE') {
@@ -118,9 +163,9 @@ export async function createChangeRequest(
 
   const result = await db.query<ChangeRequestRow>(
     `INSERT INTO change_requests (workspace_id, request_type, payload, status, requested_by)
-     VALUES ('default', $1, $2::jsonb, 'PENDING', $3)
+     VALUES ($1, $2, $3::jsonb, 'PENDING', $4)
      RETURNING id, request_type, payload, status, requested_by, reviewed_by, created_at, reviewed_at`,
-    [requestType, JSON.stringify(payload), requestedBy],
+    [workspaceId, requestType, JSON.stringify(payload), requestedBy],
   );
 
   return result.rows[0];
@@ -130,15 +175,16 @@ export async function applyChangeRequest(
   db: DbLike,
   id: number,
   nextStatus: Extract<ChangeRequestStatus, 'APPROVED' | 'REJECTED'>,
-  options: { reviewedBy?: string | null } = {},
+  options: { reviewedBy?: string | null; workspaceId?: string | null } = {},
 ): Promise<{ id: number; status: ChangeRequestStatus }> {
   const reviewedBy = normalizeActor(options.reviewedBy, 'system');
+  const workspaceId = normalizeWorkspaceId(options.workspaceId);
   const crResult = await db.query<ChangeRequestRow>(
     `SELECT id, request_type, payload, status, requested_by, reviewed_by
      FROM change_requests
      WHERE id = $1
-       AND workspace_id = 'default'`,
-    [id],
+       AND workspace_id = $2`,
+    [id, workspaceId],
   );
 
   const cr = crResult.rows[0];
@@ -165,8 +211,8 @@ export async function applyChangeRequest(
         const toUrn = dependencyPayload.toId;
         const relationType = dependencyPayload.type;
         const [subjectObjectId, targetObjectId] = await Promise.all([
-          resolveServiceObjectId(db, fromUrn),
-          resolveServiceObjectId(db, toUrn),
+          resolveServiceObjectId(db, workspaceId, fromUrn),
+          resolveServiceObjectId(db, workspaceId, toUrn),
         ]);
 
         if (!subjectObjectId || !targetObjectId) {
@@ -174,16 +220,12 @@ export async function applyChangeRequest(
         }
 
         if (cr.request_type === 'RELATION_UPSERT') {
-          const evidenceJson = JSON.stringify(
-            dependencyPayload?.evidence
-              ? [{ kind: dependencyPayload.source, value: dependencyPayload.evidence }]
-              : [],
-          );
+          const evidenceJson = JSON.stringify(buildEvidenceEnvelope(dependencyPayload));
 
           await db.query(
             `INSERT INTO object_relations
              (id, workspace_id, subject_object_id, relation_type, target_object_id, approved, is_derived, source, confidence, evidence)
-             VALUES ($1, 'default', $2, $3, $4, TRUE, FALSE, $5, $6, $7::jsonb)
+             VALUES ($1, $2, $3, $4, $5, TRUE, FALSE, $6, $7, $8::jsonb)
              ON CONFLICT (workspace_id, subject_object_id, relation_type, target_object_id, is_derived)
              DO UPDATE SET approved = TRUE,
                            is_derived = FALSE,
@@ -193,6 +235,7 @@ export async function applyChangeRequest(
                            updated_at = CURRENT_TIMESTAMP`,
             [
               randomUUID(),
+              workspaceId,
               subjectObjectId,
               relationType,
               targetObjectId,
@@ -206,12 +249,12 @@ export async function applyChangeRequest(
         if (cr.request_type === 'RELATION_DELETE') {
           await db.query(
             `DELETE FROM object_relations
-             WHERE workspace_id = 'default'
-               AND subject_object_id = $1
-               AND target_object_id = $2
-               AND relation_type = $3
+             WHERE workspace_id = $1
+               AND subject_object_id = $2
+               AND target_object_id = $3
+               AND relation_type = $4
                AND is_derived = FALSE`,
-            [subjectObjectId, targetObjectId, relationType],
+            [workspaceId, subjectObjectId, targetObjectId, relationType],
           );
         }
       }
@@ -223,9 +266,9 @@ export async function applyChangeRequest(
            reviewed_by = $3,
            reviewed_at = CURRENT_TIMESTAMP
        WHERE id = $1
-         AND workspace_id = 'default'
+         AND workspace_id = $4
        RETURNING id, status`,
-      [id, nextStatus, reviewedBy],
+      [id, nextStatus, reviewedBy, workspaceId],
     );
 
     await db.query('COMMIT');
@@ -241,7 +284,7 @@ export async function applyBulkChangeRequests(
   db: DbLike,
   ids: number[],
   nextStatus: Extract<ChangeRequestStatus, 'APPROVED' | 'REJECTED'>,
-  options: { reviewedBy?: string | null } = {},
+  options: { reviewedBy?: string | null; workspaceId?: string | null } = {},
 ): Promise<{ processed: number; succeeded: number; failed: Array<{ id: number; reason: string }> }> {
   const failed: Array<{ id: number; reason: string }> = [];
   let succeeded = 0;
@@ -265,25 +308,28 @@ export async function applyBulkChangeRequests(
 export async function listPendingIds(
   db: DbLike,
   excludeIds: number[] = [],
+  options: WorkspaceScopedOptions = {},
 ): Promise<number[]> {
+  const workspaceId = normalizeWorkspaceId(options.workspaceId);
   if (excludeIds.length === 0) {
     const result = await db.query<{ id: number }>(
       `SELECT id FROM change_requests
-       WHERE workspace_id = 'default'
+       WHERE workspace_id = $1
          AND status = 'PENDING'
        ORDER BY id ASC`,
+      [workspaceId],
     );
     return result.rows.map((row) => row.id);
   }
 
-  const placeholders = excludeIds.map((_, idx) => `$${idx + 1}`).join(', ');
+  const placeholders = excludeIds.map((_, idx) => `$${idx + 2}`).join(', ');
   const result = await db.query<{ id: number }>(
     `SELECT id FROM change_requests
-     WHERE workspace_id = 'default'
+     WHERE workspace_id = $1
        AND status = 'PENDING'
        AND id NOT IN (${placeholders})
      ORDER BY id ASC`,
-    excludeIds,
+    [workspaceId, ...excludeIds],
   );
   return result.rows.map((row) => row.id);
 }

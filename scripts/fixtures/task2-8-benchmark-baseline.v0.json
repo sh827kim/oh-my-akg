@@ -1,0 +1,10 @@
+{
+  "version": "task2-8-benchmark-baseline-v0",
+  "generatedAt": "2026-02-21T00:00:00.000Z",
+  "summary": {
+    "precision": 0.889,
+    "recall": 1,
+    "evidenceCoverage": 1,
+    "f1": 0.941
+  }
+}

@@ -5,12 +5,17 @@ import { fetchRepos } from '../utils/github';
 import { getDb } from '@archi-navi/core';
 import { buildDependencyUpsertPayload } from '@archi-navi/core';
 import { buildServiceMetadata, inferProjectType } from '@archi-navi/core';
-import { inferEnvMappingCandidates } from '@archi-navi/inference';
+import { getWorkspaceInferenceSettings, recordInferenceRunMetrics } from '@archi-navi/core';
+import { inferEnvMappingCandidatesWithMetrics } from '@archi-navi/inference';
 
 export const syncCommand = new Command('sync')
   .description('Synchronize repositories and dependencies from GitHub')
   .argument('[org]', 'GitHub Organization name')
   .option('-o, --org <org>', 'GitHub Organization name (optional)')
+  .option('-w, --workspace <workspaceId>', 'Workspace ID (default: workspace setting/default)')
+  .option('--shadow-mode', 'Run inference in shadow mode (do not enqueue change requests)')
+  .option('--no-ast-plugins', 'Disable AST plugin inference stage')
+  .option('--no-fallback', 'Disable fallback heuristic inference stage')
   .option('--deps-file <path>', 'JSON file of dependency candidates to enqueue')
   .action(async (orgArg, options) => {
     const org = orgArg || options.org || process.env.GITHUB_ORG;
@@ -19,17 +24,36 @@ export const syncCommand = new Command('sync')
       process.exit(1);
     }
 
+    const rawArgv = process.argv.slice(2);
+    const shadowModeOverride = rawArgv.includes('--shadow-mode') ? true : undefined;
+    const astPluginsOverride = rawArgv.includes('--no-ast-plugins') ? false : undefined;
+    const fallbackOverride = rawArgv.includes('--no-fallback') ? false : undefined;
+
     console.log(`Starting synchronization for organization: ${org}...`);
 
     try {
       const repos = await fetchRepos(org);
       const db = await getDb();
+      const inferenceSettings = await getWorkspaceInferenceSettings(
+        db,
+        typeof options.workspace === 'string' ? options.workspace : undefined,
+      );
+      const workspaceId = inferenceSettings.workspaceId;
+      const shadowMode = shadowModeOverride ?? inferenceSettings.shadowModeEnabled;
+      const astPluginsEnabled = astPluginsOverride ?? inferenceSettings.astPluginsEnabled;
+      const fallbackEnabled = fallbackOverride ?? inferenceSettings.fallbackEnabled;
+
+      console.log(
+        `Workspace: ${workspaceId} | inference mode: ${astPluginsEnabled ? 'full' : fallbackEnabled ? 'fallback' : 'disabled'} | shadow: ${shadowMode}`,
+      );
 
       console.log('Updating database...');
       let newCount = 0;
       let updatedCount = 0;
       let queuedCount = 0;
       let autoQueuedCount = 0;
+      let shadowAutoCandidates = 0;
+      let shadowManualCandidates = 0;
 
       const validTypesRes = await db.query<{ name: string }>('SELECT name FROM project_types');
       const validTypes = new Set(validTypesRes.rows.map((row) => row.name));
@@ -43,10 +67,10 @@ export const syncCommand = new Command('sync')
         const existing = await db.query<{ id: string; metadata: unknown }>(
           `SELECT id, metadata
            FROM objects
-           WHERE workspace_id = 'default'
+           WHERE workspace_id = $1
              AND object_type = 'service'
-             AND urn = $1`,
-          [repo.id],
+             AND urn = $2`,
+          [workspaceId, repo.id],
         );
 
         const projectType = normalizeType(inferProjectType(repo.name, repo.language));
@@ -63,16 +87,23 @@ export const syncCommand = new Command('sync')
           await db.query(
             `INSERT INTO objects
              (id, workspace_id, object_type, name, display_name, urn, visibility, granularity, metadata)
-             VALUES ($1, 'default', 'service', $2, NULL, $3, 'VISIBLE', 'COMPOUND', $4::jsonb)`,
-            [randomUUID(), repo.name, repo.id, JSON.stringify(metadata)],
+             VALUES ($1, $2, 'service', $3, NULL, $4, 'VISIBLE', 'COMPOUND', $5::jsonb)`,
+            [randomUUID(), workspaceId, repo.name, repo.id, JSON.stringify(metadata)],
           );
           newCount++;
         } else {
+          const existingMetadata = existing.rows[0].metadata;
+          const hasProjectType =
+            !!existingMetadata &&
+            typeof existingMetadata === 'object' &&
+            typeof (existingMetadata as { project_type?: unknown }).project_type === 'string' &&
+            !!(existingMetadata as { project_type: string }).project_type.trim();
+
           const metadata = buildServiceMetadata({
-            existing: existing.rows[0].metadata,
+            existing: existingMetadata,
             repoUrl: repo.url,
             description: repo.description,
-            projectType,
+            ...(hasProjectType ? {} : { projectType }),
             status: 'ACTIVE',
             lastSeenAt: new Date().toISOString(),
           });
@@ -92,11 +123,11 @@ export const syncCommand = new Command('sync')
       const existingActive = await db.query<{ id: string; metadata: unknown; urn: string }>(
         `SELECT id, metadata, urn
          FROM objects
-         WHERE workspace_id = 'default'
+         WHERE workspace_id = $1
            AND object_type = 'service'
            AND COALESCE(metadata->>'status', 'ACTIVE') = 'ACTIVE'
-           AND urn LIKE $1`,
-        [`${org}/%`],
+           AND urn LIKE $2`,
+        [workspaceId, `${org}/%`],
       );
 
       for (const row of existingActive.rows) {
@@ -129,7 +160,32 @@ export const syncCommand = new Command('sync')
          WHERE enabled = TRUE`,
       );
 
-      const envMappingCandidates = await inferEnvMappingCandidates(repos, mappingPatternsResult.rows);
+      const inferenceResult = await inferEnvMappingCandidatesWithMetrics(
+        repos,
+        mappingPatternsResult.rows,
+        {
+          astPluginsEnabled,
+          fallbackEnabled,
+        },
+      );
+      const envMappingCandidates = inferenceResult.candidates;
+
+      await recordInferenceRunMetrics(db, {
+        workspaceId,
+        mode: inferenceResult.metrics.mode,
+        shadowMode,
+        astPluginsEnabled,
+        fallbackEnabled,
+        repoCount: inferenceResult.metrics.repoCount,
+        configFilesScanned: inferenceResult.metrics.configFilesScanned,
+        sourceFilesScanned: inferenceResult.metrics.sourceFilesScanned,
+        candidateCount: inferenceResult.metrics.candidateCount,
+        lowConfidenceCount: inferenceResult.metrics.lowConfidenceCount,
+        avgConfidence: inferenceResult.metrics.avgConfidence,
+        failures: inferenceResult.metrics.failures,
+        durationMs: inferenceResult.metrics.durationMs,
+        throughputPerSec: inferenceResult.metrics.throughputPerSec,
+      });
 
       for (const candidate of envMappingCandidates) {
         const payload = buildDependencyUpsertPayload({
@@ -139,40 +195,52 @@ export const syncCommand = new Command('sync')
           source: candidate.source,
           confidence: candidate.confidence,
           evidence: candidate.evidence,
+          scoreVersion: candidate.scoreVersion,
+          reviewTag: candidate.reviewLane === 'low_confidence' ? 'LOW_CONFIDENCE' : 'NORMAL',
+          tags: candidate.tags,
         });
 
-        const dedupe = await db.query(
+        if (shadowMode) {
+          shadowAutoCandidates++;
+          continue;
+        }
+
+        const dedupe = await db.query<{ id: number }>(
           `SELECT id FROM change_requests
-           WHERE workspace_id = 'default'
+           WHERE workspace_id = $1
              AND status = 'PENDING'
              AND request_type = 'RELATION_UPSERT'
-             AND payload @> $1::jsonb
+             AND payload @> $2::jsonb
            LIMIT 1`,
-          [JSON.stringify({ fromId: payload.fromId, toId: payload.toId, type: payload.type })],
+          [workspaceId, JSON.stringify({ fromId: payload.fromId, toId: payload.toId, type: payload.type })],
         );
 
         if (dedupe.rows.length > 0) continue;
 
-        const relationExists = await db.query(
+        const relationExists = await db.query<{ id: string }>(
           `SELECT r.id
            FROM approved_object_relations r
            JOIN objects s ON s.id = r.subject_object_id
            JOIN objects t ON t.id = r.target_object_id
-           WHERE r.workspace_id = 'default'
+           WHERE r.workspace_id = $1
              AND r.is_derived = FALSE
-             AND s.urn = $1
-             AND t.urn = $2
-             AND r.relation_type = $3
+             AND s.urn = $2
+             AND t.urn = $3
+             AND r.relation_type = $4
            LIMIT 1`,
-          [payload.fromId, payload.toId, payload.type],
+          [workspaceId, payload.fromId, payload.toId, payload.type],
         );
 
         if (relationExists.rows.length > 0) continue;
 
+        const requestedBy = candidate.reviewLane === 'low_confidence'
+          ? `${payload.fromId}:low-confidence`
+          : payload.fromId;
+
         await db.query(
           `INSERT INTO change_requests (workspace_id, request_type, payload, status, requested_by)
-           VALUES ('default', 'RELATION_UPSERT', $1::jsonb, 'PENDING', $2)`,
-          [JSON.stringify(payload), payload.fromId],
+           VALUES ($1, 'RELATION_UPSERT', $2::jsonb, 'PENDING', $3)`,
+          [workspaceId, JSON.stringify(payload), requestedBy],
         );
         autoQueuedCount++;
       }
@@ -196,31 +264,63 @@ export const syncCommand = new Command('sync')
               source: typeof candidate?.source === 'string' ? candidate.source : 'inference',
               confidence: candidate?.confidence,
               evidence: candidate?.evidence,
+              scoreVersion: typeof candidate?.scoreVersion === 'string' ? candidate.scoreVersion : 'v1.0',
+              reviewTag:
+                typeof candidate?.reviewTag === 'string'
+                  ? candidate.reviewTag
+                  : Number(candidate?.confidence) < 0.65
+                    ? 'LOW_CONFIDENCE'
+                    : 'NORMAL',
+              tags: Array.isArray(candidate?.tags) ? candidate.tags : undefined,
             });
 
-            const dedupe = await db.query(
+            if (shadowMode) {
+              shadowManualCandidates++;
+              continue;
+            }
+
+            const dedupe = await db.query<{ id: number }>(
               `SELECT id FROM change_requests
-               WHERE workspace_id = 'default'
+               WHERE workspace_id = $1
                  AND status = 'PENDING'
                  AND request_type = 'RELATION_UPSERT'
-                 AND payload @> $1::jsonb
+                 AND payload @> $2::jsonb
                LIMIT 1`,
-              [JSON.stringify({ fromId: payload.fromId, toId: payload.toId, type: payload.type })],
+              [workspaceId, JSON.stringify({ fromId: payload.fromId, toId: payload.toId, type: payload.type })],
             );
 
             if (dedupe.rows.length > 0) continue;
 
+            const requestedBy = payload.reviewTag === 'LOW_CONFIDENCE'
+              ? `${payload.fromId}:low-confidence`
+              : payload.fromId;
+
             await db.query(
               `INSERT INTO change_requests (workspace_id, request_type, payload, status, requested_by)
-               VALUES ('default', 'RELATION_UPSERT', $1::jsonb, 'PENDING', $2)`,
-              [JSON.stringify(payload), payload.fromId],
+               VALUES ($1, 'RELATION_UPSERT', $2::jsonb, 'PENDING', $3)`,
+              [workspaceId, JSON.stringify(payload), requestedBy],
             );
             queuedCount++;
           }
         }
       }
 
-      console.log(`Sync complete. New: ${newCount}, Updated: ${updatedCount}, AutoQueued: ${autoQueuedCount}, Queued: ${queuedCount}`);
+      console.log(
+        [
+          'Sync complete.',
+          `Workspace: ${workspaceId}`,
+          `New: ${newCount}`,
+          `Updated: ${updatedCount}`,
+          `AutoQueued: ${autoQueuedCount}`,
+          `Queued: ${queuedCount}`,
+          `ShadowAutoCandidates: ${shadowAutoCandidates}`,
+          `ShadowManualCandidates: ${shadowManualCandidates}`,
+          `InferenceMode: ${inferenceResult.metrics.mode}`,
+          `Candidates: ${inferenceResult.metrics.candidateCount}`,
+          `AvgConfidence: ${inferenceResult.metrics.avgConfidence.toFixed(3)}`,
+          `Failures: ${inferenceResult.metrics.failures}`,
+        ].join(' '),
+      );
     } catch (error) {
       console.error('Sync failed:', error);
       process.exit(1);

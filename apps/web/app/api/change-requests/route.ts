@@ -6,8 +6,9 @@ export async function GET(req: NextRequest) {
     const status = (req.nextUrl.searchParams.get('status') || 'PENDING').toUpperCase() as ChangeRequestStatus;
     const limitRaw = Number(req.nextUrl.searchParams.get('limit') || '200');
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 1000) : 200;
+    const workspaceId = req.nextUrl.searchParams.get('workspaceId') || undefined;
     const db = await getDb();
-    const items = await listChangeRequests(db, status, limit);
+    const items = await listChangeRequests(db, status, limit, { workspaceId });
 
     return NextResponse.json({ items });
   } catch (error) {
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { requestType, payload, requestedBy } = body ?? {};
+    const { requestType, payload, requestedBy, workspaceId } = body ?? {};
 
     if (!requestType || !payload) {
       return NextResponse.json({ error: 'requestType and payload are required' }, { status: 400 });
@@ -34,6 +35,7 @@ export async function POST(req: NextRequest) {
       requestType,
       payload,
       requestedBy: typeof requestedBy === 'string' ? requestedBy : undefined,
+      workspaceId: typeof workspaceId === 'string' ? workspaceId : undefined,
     });
 
     return NextResponse.json({ item }, { status: 201 });
