@@ -141,6 +141,8 @@ export async function POST(req: NextRequest) {
         fromId: candidate.fromId,
         toId: candidate.toId,
         type: candidate.type,
+        source: candidate.source,
+        confidence: candidate.confidence,
         evidence: candidate.evidence,
       });
 
@@ -158,7 +160,7 @@ export async function POST(req: NextRequest) {
 
       const relationExists = await db.query<{ id: string }>(
         `SELECT r.id
-         FROM object_relations r
+         FROM approved_object_relations r
          JOIN objects s ON s.id = r.subject_object_id
          JOIN objects t ON t.id = r.target_object_id
          WHERE r.workspace_id = 'default'
@@ -180,17 +182,35 @@ export async function POST(req: NextRequest) {
       autoMappingApprovalsCreated++;
     }
 
-    for (const candidate of dependencyCandidates) {
+    for (const [index, candidate] of dependencyCandidates.entries()) {
       const fromId = typeof candidate?.fromId === 'string' ? candidate.fromId : null;
       const toId = typeof candidate?.toId === 'string' ? candidate.toId : null;
-      if (!fromId || !toId) continue;
+      if (!fromId || !toId) {
+        return NextResponse.json(
+          { error: `dependency_candidates[${index}] must include fromId/toId` },
+          { status: 400 },
+        );
+      }
 
-      const payload = buildDependencyUpsertPayload({
-        fromId,
-        toId,
-        type: typeof candidate?.type === 'string' ? candidate.type : undefined,
-        evidence: typeof candidate?.evidence === 'string' ? candidate.evidence : undefined,
-      });
+      let payload: ReturnType<typeof buildDependencyUpsertPayload>;
+      try {
+        payload = buildDependencyUpsertPayload({
+          fromId,
+          toId,
+          type: typeof candidate?.type === 'string' ? candidate.type : undefined,
+          source: typeof candidate?.source === 'string' ? candidate.source : 'inference',
+          confidence: candidate?.confidence,
+          evidence: candidate?.evidence,
+        });
+      } catch (error) {
+        return NextResponse.json(
+          {
+            error: `dependency_candidates[${index}] is invalid`,
+            details: error instanceof Error ? error.message : String(error),
+          },
+          { status: 400 },
+        );
+      }
 
       const dedupe = await db.query<{ id: number }>(
         `SELECT id FROM change_requests

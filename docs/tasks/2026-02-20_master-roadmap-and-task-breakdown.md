@@ -122,24 +122,24 @@
 ## Task 2 세부 Task (승인 + 추론)
 
 ### 2-1. 승인 큐 API
-- [ ] `GET /api/change-requests` 구현/정리
-- [ ] `POST /api/change-requests/bulk` 구현/정리
-- [ ] 승인/반려 시 감사 필드(`reviewed_by`, `reviewed_at`) 반영
+- [x] `GET /api/change-requests` 구현/정리
+- [x] `POST /api/change-requests/bulk` 구현/정리
+- [x] 승인/반려 시 감사 필드(`reviewed_by`, `reviewed_at`) 반영
 
 ### 2-2. 반영 게이트 강제
-- [ ] 미승인 관계가 조회/집계에서 제외되도록 공통 필터 적용
-- [ ] 승인 이벤트 발생 시 정규 관계 반영 + roll-up 갱신
-- [ ] 반려 시 반영 차단 및 상태 유지
+- [x] 미승인 관계가 조회/집계에서 제외되도록 공통 필터 적용
+- [x] 승인 이벤트 발생 시 정규 관계 반영 + roll-up 갱신
+- [x] 반려 시 반영 차단 및 상태 유지
 
 ### 2-3. inference 계약 강제
-- [ ] inference payload에 `confidence`, `evidence` 필수화
-- [ ] 필수값 누락 시 저장/승인 파이프라인 차단
-- [ ] source 타입별 검증 규칙 정리(manual/scan/inference/rollup)
+- [x] inference payload에 `confidence`, `evidence` 필수화
+- [x] 필수값 누락 시 저장/승인 파이프라인 차단
+- [x] source 타입별 검증 규칙 정리(manual/scan/inference/rollup)
 
 ### 2-4. 테스트
-- [ ] core validation unit test (T2-3)
-- [ ] relation 제약 테스트 (T2-3)
-- [ ] 승인 전 반영 금지 테스트 + evidence 필수 테스트 (T3-3)
+- [x] core validation unit test (T2-3)
+- [x] relation 제약 테스트 (T2-3)
+- [x] 승인 전 반영 금지 테스트 + evidence 필수 테스트 (T3-3)
 
 ### 2-5. AST 파이프라인 아키텍처 고도화
 - [ ] 공통 AST 인터페이스 정의(`parse -> extract -> normalize -> emit`)

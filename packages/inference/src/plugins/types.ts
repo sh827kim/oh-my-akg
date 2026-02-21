@@ -6,6 +6,7 @@ export interface SourceFile {
 export interface AstInferenceSignal {
   hint: string;
   evidence: string;
+  confidence?: number;
 }
 
 export interface AstParseResult {

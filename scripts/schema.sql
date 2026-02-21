@@ -114,6 +114,11 @@ CREATE INDEX IF NOT EXISTS object_relations_workspace_relation_approved_idx
 CREATE INDEX IF NOT EXISTS object_relations_workspace_derived_approved_idx
   ON object_relations (workspace_id, is_derived, approved);
 
+CREATE OR REPLACE VIEW approved_object_relations AS
+SELECT *
+FROM object_relations
+WHERE approved = TRUE;
+
 CREATE TABLE IF NOT EXISTS object_tags (
   workspace_id TEXT NOT NULL DEFAULT 'default',
   object_id UUID NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
@@ -141,6 +146,51 @@ CREATE TABLE IF NOT EXISTS change_requests (
   ),
   CONSTRAINT change_requests_status_check CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED'))
 );
+
+ALTER TABLE change_requests
+  ADD COLUMN IF NOT EXISTS workspace_id TEXT NOT NULL DEFAULT 'default';
+ALTER TABLE change_requests
+  ADD COLUMN IF NOT EXISTS request_type TEXT;
+ALTER TABLE change_requests
+  ADD COLUMN IF NOT EXISTS requested_by TEXT;
+ALTER TABLE change_requests
+  ADD COLUMN IF NOT EXISTS reviewed_by TEXT;
+ALTER TABLE change_requests
+  ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE change_requests
+  ADD COLUMN IF NOT EXISTS change_type TEXT;
+
+UPDATE change_requests
+SET request_type = COALESCE(request_type, change_type)
+WHERE request_type IS NULL;
+
+ALTER TABLE change_requests
+  ALTER COLUMN workspace_id SET DEFAULT 'default';
+ALTER TABLE change_requests
+  ALTER COLUMN workspace_id SET NOT NULL;
+ALTER TABLE change_requests
+  ALTER COLUMN payload SET NOT NULL;
+ALTER TABLE change_requests
+  ALTER COLUMN status SET DEFAULT 'PENDING';
+ALTER TABLE change_requests
+  ALTER COLUMN status SET NOT NULL;
+ALTER TABLE change_requests
+  ALTER COLUMN request_type SET NOT NULL;
+
+ALTER TABLE change_requests
+  DROP CONSTRAINT IF EXISTS change_requests_request_type_check;
+ALTER TABLE change_requests
+  ADD CONSTRAINT change_requests_request_type_check CHECK (
+    request_type IN ('RELATION_UPSERT', 'RELATION_DELETE', 'OBJECT_PATCH')
+  );
+
+ALTER TABLE change_requests
+  DROP CONSTRAINT IF EXISTS change_requests_status_check;
+ALTER TABLE change_requests
+  ADD CONSTRAINT change_requests_status_check CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED'));
+
+ALTER TABLE change_requests
+  DROP COLUMN IF EXISTS change_type;
 
 CREATE INDEX IF NOT EXISTS change_requests_workspace_status_idx
   ON change_requests (workspace_id, status, created_at);

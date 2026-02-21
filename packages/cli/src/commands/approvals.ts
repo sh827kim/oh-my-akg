@@ -45,10 +45,12 @@ export const approvalsCommand = new Command('approvals')
       .option('--ids <ids>', 'comma-separated request ids, e.g. 1,2,3')
       .option('--all', 'target all pending requests', false)
       .option('--exclude <ids>', 'exclude ids when used with --all')
+      .option('--reviewed-by <actor>', 'review actor for audit fields', 'cli')
       .option('--dry-run', 'preview only, do not apply', false)
       .action(async (options) => {
         const db = await getDb();
         const nextStatus = (options.status || 'APPROVED').toUpperCase() as 'APPROVED' | 'REJECTED';
+        const reviewedBy = typeof options.reviewedBy === 'string' ? options.reviewedBy : 'cli';
         if (!['APPROVED', 'REJECTED'].includes(nextStatus)) {
           console.error('status must be APPROVED or REJECTED');
           process.exit(1);
@@ -74,7 +76,7 @@ export const approvalsCommand = new Command('approvals')
           return;
         }
 
-        const summary = await applyBulkChangeRequests(db, ids, nextStatus);
+        const summary = await applyBulkChangeRequests(db, ids, nextStatus, { reviewedBy });
         console.log(`Processed=${summary.processed} Succeeded=${summary.succeeded} Failed=${summary.failed.length}`);
         for (const fail of summary.failed) {
           console.log(`  - id=${fail.id} reason=${fail.reason}`);

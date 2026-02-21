@@ -136,6 +136,8 @@ export const syncCommand = new Command('sync')
           fromId: candidate.fromId,
           toId: candidate.toId,
           type: candidate.type,
+          source: candidate.source,
+          confidence: candidate.confidence,
           evidence: candidate.evidence,
         });
 
@@ -153,7 +155,7 @@ export const syncCommand = new Command('sync')
 
         const relationExists = await db.query(
           `SELECT r.id
-           FROM object_relations r
+           FROM approved_object_relations r
            JOIN objects s ON s.id = r.subject_object_id
            JOIN objects t ON t.id = r.target_object_id
            WHERE r.workspace_id = 'default'
@@ -180,15 +182,20 @@ export const syncCommand = new Command('sync')
         const candidates = JSON.parse(raw);
 
         if (Array.isArray(candidates)) {
-          for (const candidate of candidates) {
+          for (const [index, candidate] of candidates.entries()) {
             const fromId = typeof candidate?.fromId === 'string' ? candidate.fromId : null;
             const toId = typeof candidate?.toId === 'string' ? candidate.toId : null;
-            if (!fromId || !toId) continue;
+            if (!fromId || !toId) {
+              throw new Error(`dependency candidate[${index}] must include fromId/toId`);
+            }
+
             const payload = buildDependencyUpsertPayload({
               fromId,
               toId,
               type: typeof candidate?.type === 'string' ? candidate.type : undefined,
-              evidence: typeof candidate?.evidence === 'string' ? candidate.evidence : undefined,
+              source: typeof candidate?.source === 'string' ? candidate.source : 'inference',
+              confidence: candidate?.confidence,
+              evidence: candidate?.evidence,
             });
 
             const dedupe = await db.query(

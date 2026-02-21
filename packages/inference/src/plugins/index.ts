@@ -152,5 +152,6 @@ export function extractSignalsWithPlugins(
   return runAstPipelineWithPlugins(file, plugins).signals.map((signal) => ({
     hint: signal.hint,
     evidence: signal.evidence,
+    ...(typeof signal.confidence === 'number' ? { confidence: signal.confidence } : {}),
   }));
 }

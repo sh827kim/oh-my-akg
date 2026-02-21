@@ -53,17 +53,15 @@ async function getProjects() {
           o.updated_at,
           (
             SELECT COUNT(*)::int
-            FROM object_relations r
+            FROM approved_object_relations r
             WHERE r.workspace_id = 'default'
               AND r.target_object_id = o.id
-              AND r.approved = TRUE
           ) AS inbound_count,
           (
             SELECT COUNT(*)::int
-            FROM object_relations r
+            FROM approved_object_relations r
             WHERE r.workspace_id = 'default'
               AND r.subject_object_id = o.id
-              AND r.approved = TRUE
           ) AS outbound_count
         FROM objects o
         WHERE o.workspace_id = 'default'
