@@ -30,7 +30,7 @@ export function CommandPalette() {
 
     useEffect(() => {
         if (open) {
-            fetch('/api/projects')
+            fetch('/api/objects')
                 .then((res) => res.json())
                 .then((data) => setProjects(data))
                 .catch((err) => console.error('Failed to load projects', err));

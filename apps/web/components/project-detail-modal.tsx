@@ -59,7 +59,7 @@ export function ProjectDetailModal({ project, isOpen, onClose, tags }: ProjectDe
         if (!project || !isOpen) return;
 
         let cancelled = false;
-        fetch(`/api/projects/${encodeURIComponent(project.id)}/dependencies`)
+        fetch(`/api/objects/${encodeURIComponent(project.id)}/dependencies`)
             .then(async (res) => {
                 const json = (await res.json()) as DependenciesResponse | { error?: string };
                 if (!res.ok) {

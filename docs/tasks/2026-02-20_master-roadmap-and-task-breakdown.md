@@ -97,9 +97,9 @@
 - [ ] 백필 중 충돌 규칙(중복/누락/이름 충돌) 정의
 
 ### 1-3. API/서비스 전환
-- [ ] Object/Relation/Tag API를 신규 모델로 전환
-- [ ] Service List/Architecture/Object Mapping 조회 쿼리 전환
-- [ ] 레거시 API 경로 사용처 제거 또는 어댑터 최소화
+- [x] Object/Relation/Tag API를 신규 모델로 전환
+- [x] Service List/Architecture/Object Mapping 조회 쿼리 전환
+- [x] 레거시 API 경로 사용처 제거 또는 어댑터 최소화
 
 ### 1-4. 레거시 정리
 - [ ] 코드 내 `projects/edges` 직접 의존 구간 제거
