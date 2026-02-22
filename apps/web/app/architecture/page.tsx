@@ -2,7 +2,7 @@ import { getDb } from '@archi-navi/core';
 import { ArchitectureGraph } from '@/components/architecture-graph';
 import { SidePanel } from '@/components/side-panel';
 import { materializeRollup } from '@archi-navi/core';
-import { getProjectTypeFromMetadata } from '@archi-navi/core';
+import { getServiceTypeFromMetadata } from '@archi-navi/core';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +24,7 @@ interface ArchitectureEdgeRow {
   type: string;
 }
 
-interface ProjectTypeRow {
+interface ServiceTypeRow {
   id: number;
   name: string;
   color_hex: string;
@@ -42,8 +42,8 @@ interface LayerDef {
 async function getArchitectureData() {
   const db = await getDb();
 
-  const [projectTypeResult, projectsResult, edgesResult] = await Promise.all([
-    db.query<ProjectTypeRow>(`
+  const [serviceTypeResult, projectsResult, edgesResult] = await Promise.all([
+    db.query<ServiceTypeRow>(`
       SELECT id, name, color_hex, sort_order, enabled
       FROM project_types
       ORDER BY sort_order ASC, id ASC
@@ -80,7 +80,7 @@ async function getArchitectureData() {
     `),
   ]);
 
-  const layers: LayerDef[] = projectTypeResult.rows
+  const layers: LayerDef[] = serviceTypeResult.rows
     .filter((row) => row.enabled)
     .map((row) => ({
       key: row.name,
@@ -105,8 +105,8 @@ async function getArchitectureData() {
   for (const layer of orderedLayers) grouped.set(layer.key, []);
 
   for (const row of projectsResult.rows) {
-    const projectType = getProjectTypeFromMetadata(row.metadata);
-    const layerKey = grouped.has(projectType) ? projectType : 'unknown';
+    const serviceType = getServiceTypeFromMetadata(row.metadata);
+    const layerKey = grouped.has(serviceType) ? serviceType : 'unknown';
     grouped.get(layerKey)?.push(row);
   }
 
@@ -133,13 +133,13 @@ async function getArchitectureData() {
     const y = layerBaseY + layerIndex * layerSpacing + 52;
 
     return items.map((project, itemIndex) => {
-      const projectType = getProjectTypeFromMetadata(project.metadata);
+      const serviceType = getServiceTypeFromMetadata(project.metadata);
       return {
         data: {
           id: project.id,
           label: project.label,
-          type: projectType,
-          color: colorMap.get(projectType) ?? '#6b7280',
+          type: serviceType,
+          color: colorMap.get(serviceType) ?? '#6b7280',
           layer: layer.key,
         },
         position: {

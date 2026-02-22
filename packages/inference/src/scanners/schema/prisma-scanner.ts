@@ -90,7 +90,7 @@ export const prismaScanner: Scanner = {
         const urnBase = serviceUrn.replace(/:service$/, '');
 
         // model 블록 파싱: model ModelName { ... }
-        const modelBlockRegex = /^model\s+(\w+)\s*\{([^}]*)\}/gms;
+        const modelBlockRegex = /^model\s+(\w+)\s*\{([^}]*)\}/gm;
         let match: RegExpExecArray | null;
 
         while ((match = modelBlockRegex.exec(file.content)) !== null) {

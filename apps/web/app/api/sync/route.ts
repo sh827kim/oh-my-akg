@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { getDb } from '@archi-navi/core';
 import { fetchRepos } from '@archi-navi/config';
 import { buildDependencyUpsertPayload } from '@archi-navi/core';
-import { buildServiceMetadata, inferProjectType } from '@archi-navi/core';
+import { buildServiceMetadata, inferServiceType } from '@archi-navi/core';
 import { getWorkspaceInferenceSettings, recordInferenceRunMetrics } from '@archi-navi/core';
 import { runInferencePipeline } from '@archi-navi/inference';
 
@@ -64,13 +64,13 @@ export async function POST(req: NextRequest) {
         [workspaceId, repo.id],
       );
 
-      const projectType = normalizeType(inferProjectType(repo.name, repo.language));
+      const serviceType = normalizeType(inferServiceType(repo.name, repo.language));
 
       if (existing.rows.length === 0) {
         const metadata = buildServiceMetadata({
           repoUrl: repo.url,
           description: repo.description,
-          projectType,
+          serviceType,
           status: 'ACTIVE',
           lastSeenAt: new Date().toISOString(),
         });
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
         created++;
       } else {
         const existingMetadata = existing.rows[0].metadata;
-        const hasProjectType =
+        const hasServiceType =
           !!existingMetadata &&
           typeof existingMetadata === 'object' &&
           typeof (existingMetadata as { project_type?: unknown }).project_type === 'string' &&
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
           existing: existingMetadata,
           repoUrl: repo.url,
           description: repo.description,
-          ...(hasProjectType ? {} : { projectType }),
+          ...(hasServiceType ? {} : { serviceType }),
           status: 'ACTIVE',
           lastSeenAt: new Date().toISOString(),
         });

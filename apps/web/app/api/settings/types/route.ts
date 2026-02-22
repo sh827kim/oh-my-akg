@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@archi-navi/core';
 
-interface ProjectTypeRow {
+interface ServiceTypeRow {
     id: number;
     name: string;
     color_hex: string;
@@ -12,7 +12,7 @@ interface ProjectTypeRow {
 export async function GET() {
     try {
         const db = await getDb();
-        const result = await db.query<ProjectTypeRow>(
+        const result = await db.query<ServiceTypeRow>(
             `
               SELECT id, name, color_hex, sort_order, enabled
               FROM project_types
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
         );
         const nextOrder = (maxOrderRes.rows[0]?.max_order ?? 0) + 10;
 
-        const result = await db.query<ProjectTypeRow>(
+        const result = await db.query<ServiceTypeRow>(
             `
               INSERT INTO project_types (name, color_hex, sort_order, enabled, updated_at)
               VALUES ($1, $2, $3, TRUE, CURRENT_TIMESTAMP)

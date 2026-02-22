@@ -5,7 +5,7 @@ interface ParamsContext {
     params: Promise<{ id: string }>;
 }
 
-interface ProjectTypeRow {
+interface ServiceTypeRow {
     id: number;
     name: string;
     color_hex: string;
@@ -51,7 +51,7 @@ export async function PATCH(req: NextRequest, context: ParamsContext) {
         }
         updates.push('updated_at = CURRENT_TIMESTAMP');
 
-        const result = await db.query<ProjectTypeRow>(
+        const result = await db.query<ServiceTypeRow>(
             `
               UPDATE project_types
               SET ${updates.join(', ')}

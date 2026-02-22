@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { ViewToggle } from '@/components/view-toggle';
 import { TagManager } from '@/components/tag-manager';
-import { ServiceDetailModal } from '@/components/project-detail-modal';
+import { ServiceDetailModal } from '@/components/service-detail-modal';
 import { CsvExportButton } from '@/components/csv-export-button';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -30,7 +30,7 @@ interface Tag {
     color: string;
 }
 
-interface ProjectType {
+interface ServiceType {
     id: number;
     name: string;
     color: string;
@@ -38,7 +38,7 @@ interface ProjectType {
     enabled: boolean;
 }
 
-interface Project {
+interface Service {
     id: string;
     repo_name: string;
     alias: string | null;
@@ -54,13 +54,13 @@ interface Project {
 }
 
 interface ServiceListManagerProps {
-    initialProjects: Project[];
+    initialServices: Service[];
     availableTags: Tag[];
-    projectTypes: ProjectType[];
+    serviceTypes: ServiceType[];
     viewMode: 'card' | 'list';
 }
 
-function getTypeStyle(type: string, types: ProjectType[]) {
+function getTypeStyle(type: string, types: ServiceType[]) {
     const entry = types.find((item) => item.name === type);
     const color = entry?.color ?? '#6b7280';
     return {
@@ -71,15 +71,15 @@ function getTypeStyle(type: string, types: ProjectType[]) {
 }
 
 export function ServiceListManager({
-    initialProjects,
+    initialServices,
     availableTags,
-    projectTypes,
+    serviceTypes,
     viewMode,
 }: ServiceListManagerProps) {
     const [isEditMode, setIsEditMode] = useState(false);
     const [showHidden, setShowHidden] = useState(false);
-    const [projects, setProjects] = useState(initialProjects);
-    const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+    const [services, setServices] = useState(initialServices);
+    const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
 
     const [syncOpen, setSyncOpen] = useState(false);
     const [syncOrg, setSyncOrg] = useState('');
@@ -90,10 +90,10 @@ export function ServiceListManager({
     const [newRepoName, setNewRepoName] = useState('');
     const [newAlias, setNewAlias] = useState('');
     const [newType, setNewType] = useState(
-        projectTypes.find((item) => item.enabled)?.name || 'unknown'
+        serviceTypes.find((item) => item.enabled)?.name || 'unknown'
     );
 
-    const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<Service | null>(null);
     const [deleteLoading, setDeleteLoading] = useState(false);
 
     const router = useRouter();
@@ -101,8 +101,8 @@ export function ServiceListManager({
     const searchQuery = searchParams.get('q')?.toLowerCase().trim() || '';
 
     const enabledTypeNames = useMemo(
-        () => projectTypes.filter((item) => item.enabled).map((item) => item.name),
-        [projectTypes]
+        () => serviceTypes.filter((item) => item.enabled).map((item) => item.name),
+        [serviceTypes]
     );
     const selectableTypeNames = useMemo(() => {
         if (enabledTypeNames.length > 0) return enabledTypeNames;
@@ -115,44 +115,44 @@ export function ServiceListManager({
         }
     }, [newType, selectableTypeNames]);
 
-    const filteredProjects = useMemo(() => {
-        return projects.filter((project) => {
-            if (!showHidden && project.visibility === 'HIDDEN') return false;
+    const filteredServices = useMemo(() => {
+        return services.filter((service) => {
+            if (!showHidden && service.visibility === 'HIDDEN') return false;
             if (!searchQuery) return true;
 
-            const tagsText = project.tags.map((tag) => tag.name.toLowerCase()).join(' ');
+            const tagsText = service.tags.map((tag) => tag.name.toLowerCase()).join(' ');
             return (
-                project.repo_name.toLowerCase().includes(searchQuery) ||
-                (project.alias || '').toLowerCase().includes(searchQuery) ||
-                project.type.toLowerCase().includes(searchQuery) ||
+                service.repo_name.toLowerCase().includes(searchQuery) ||
+                (service.alias || '').toLowerCase().includes(searchQuery) ||
+                service.type.toLowerCase().includes(searchQuery) ||
                 tagsText.includes(searchQuery)
             );
         });
-    }, [projects, searchQuery, showHidden]);
+    }, [services, searchQuery, showHidden]);
 
     const csvRows = useMemo(() => {
-        return filteredProjects.map((project) => ({
-            repo_name: project.repo_name,
-            alias: project.alias || '',
-            type: project.type,
-            visibility: project.visibility,
-            status: project.status,
-            tags: project.tags.map((tag) => tag.name).join('|'),
-            inbound_count: project.inbound_count,
-            outbound_count: project.outbound_count,
-            last_seen_at: project.last_seen_at || '',
-            updated_at: project.updated_at,
+        return filteredServices.map((service) => ({
+            repo_name: service.repo_name,
+            alias: service.alias || '',
+            type: service.type,
+            visibility: service.visibility,
+            status: service.status,
+            tags: service.tags.map((tag) => tag.name).join('|'),
+            inbound_count: service.inbound_count,
+            outbound_count: service.outbound_count,
+            last_seen_at: service.last_seen_at || '',
+            updated_at: service.updated_at,
         }));
-    }, [filteredProjects]);
+    }, [filteredServices]);
 
-    const selectedProject = projects.find((project) => project.id === selectedProjectId) || null;
-    const selectedProjectTags = selectedProject?.tags || [];
+    const selectedService = services.find((service) => service.id === selectedServiceId) || null;
+    const selectedServiceTags = selectedService?.tags || [];
 
-    const updateProjectInState = (id: string, patch: Partial<Project>) => {
-        setProjects((prev) => prev.map((project) => (project.id === id ? { ...project, ...patch } : project)));
+    const updateServiceInState = (id: string, patch: Partial<Service>) => {
+        setServices((prev) => prev.map((service) => (service.id === id ? { ...service, ...patch } : service)));
     };
 
-    const patchProject = async (id: string, patch: Record<string, string>) => {
+    const patchService = async (id: string, patch: Record<string, string>) => {
         const res = await fetch('/api/objects', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -165,50 +165,50 @@ export function ServiceListManager({
         return res.json();
     };
 
-    const toggleVisibility = async (project: Project) => {
-        const nextVisibility = project.visibility === 'VISIBLE' ? 'HIDDEN' : 'VISIBLE';
-        const prevVisibility = project.visibility;
-        updateProjectInState(project.id, { visibility: nextVisibility });
+    const toggleVisibility = async (service: Service) => {
+        const nextVisibility = service.visibility === 'VISIBLE' ? 'HIDDEN' : 'VISIBLE';
+        const prevVisibility = service.visibility;
+        updateServiceInState(service.id, { visibility: nextVisibility });
 
         try {
-            await patchProject(project.id, { visibility: nextVisibility });
+            await patchService(service.id, { visibility: nextVisibility });
             toast.success('Visibility updated');
         } catch (error) {
-            updateProjectInState(project.id, { visibility: prevVisibility });
+            updateServiceInState(service.id, { visibility: prevVisibility });
             toast.error(error instanceof Error ? error.message : 'Visibility update failed');
         }
     };
 
-    const handleTypeChange = async (project: Project, nextType: string) => {
-        const prevType = project.type;
-        updateProjectInState(project.id, { type: nextType });
+    const handleTypeChange = async (service: Service, nextType: string) => {
+        const prevType = service.type;
+        updateServiceInState(service.id, { type: nextType });
         try {
-            await patchProject(project.id, { type: nextType });
+            await patchService(service.id, { type: nextType });
             toast.success('Service type updated');
         } catch (error) {
-            updateProjectInState(project.id, { type: prevType });
+            updateServiceInState(service.id, { type: prevType });
             toast.error(error instanceof Error ? error.message : 'Type update failed');
         }
     };
 
-    const handleAliasSave = async (project: Project, nextAlias: string) => {
+    const handleAliasSave = async (service: Service, nextAlias: string) => {
         const normalized = nextAlias.trim();
-        const prevAlias = project.alias || '';
+        const prevAlias = service.alias || '';
         if (prevAlias === normalized) return;
 
-        updateProjectInState(project.id, { alias: normalized || null });
+        updateServiceInState(service.id, { alias: normalized || null });
         try {
-            await patchProject(project.id, { alias: normalized });
+            await patchService(service.id, { alias: normalized });
             toast.success('Alias updated');
         } catch (error) {
-            updateProjectInState(project.id, { alias: prevAlias || null });
+            updateServiceInState(service.id, { alias: prevAlias || null });
             toast.error(error instanceof Error ? error.message : 'Alias update failed');
         }
     };
 
-    const handleAddTag = async (projectId: string, tagId: string) => {
+    const handleAddTag = async (serviceId: string, tagId: string) => {
         try {
-            const res = await fetch(`/api/objects/${encodeURIComponent(projectId)}/tags`, {
+            const res = await fetch(`/api/objects/${encodeURIComponent(serviceId)}/tags`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tagId }),
@@ -219,11 +219,11 @@ export function ServiceListManager({
             }
 
             const tag = (await res.json()) as Tag;
-            setProjects((prev) =>
-                prev.map((project) => {
-                    if (project.id !== projectId) return project;
-                    if (project.tags.some((t) => t.id === tag.id)) return project;
-                    return { ...project, tags: [...project.tags, tag] };
+            setServices((prev) =>
+                prev.map((service) => {
+                    if (service.id !== serviceId) return service;
+                    if (service.tags.some((t) => t.id === tag.id)) return service;
+                    return { ...service, tags: [...service.tags, tag] };
                 })
             );
             toast.success('Tag added');
@@ -232,9 +232,9 @@ export function ServiceListManager({
         }
     };
 
-    const handleRemoveTag = async (projectId: string, tagId: string) => {
+    const handleRemoveTag = async (serviceId: string, tagId: string) => {
         try {
-            const res = await fetch(`/api/objects/${encodeURIComponent(projectId)}/tags`, {
+            const res = await fetch(`/api/objects/${encodeURIComponent(serviceId)}/tags`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tagId }),
@@ -244,11 +244,11 @@ export function ServiceListManager({
                 throw new Error(errorJson.error || '태그 삭제 실패');
             }
 
-            setProjects((prev) =>
-                prev.map((project) =>
-                    project.id === projectId
-                        ? { ...project, tags: project.tags.filter((tag) => tag.id !== tagId) }
-                        : project
+            setServices((prev) =>
+                prev.map((service) =>
+                    service.id === serviceId
+                        ? { ...service, tags: service.tags.filter((tag) => tag.id !== tagId) }
+                        : service
                 )
             );
             toast.success('Tag removed');
@@ -257,8 +257,8 @@ export function ServiceListManager({
         }
     };
 
-    const handleProjectClick = (projectId: string) => {
-        if (!isEditMode) setSelectedProjectId(projectId);
+    const handleServiceClick = (serviceId: string) => {
+        if (!isEditMode) setSelectedServiceId(serviceId);
     };
 
     const runSync = async () => {
@@ -283,7 +283,7 @@ export function ServiceListManager({
         }
     };
 
-    const runAddProject = async () => {
+    const runAddService = async () => {
         if (!newRepoName.trim()) {
             toast.error('repo_name is required');
             return;
@@ -304,7 +304,7 @@ export function ServiceListManager({
             const json = await res.json();
             if (!res.ok) throw new Error(json.error || 'Service creation failed');
 
-            const createdProject: Project = {
+            const createdService: Service = {
                 ...json,
                 description: 'Manually added service',
                 last_seen_at: null,
@@ -312,7 +312,7 @@ export function ServiceListManager({
                 outbound_count: 0,
                 tags: [],
             };
-            setProjects((prev) => [createdProject, ...prev]);
+            setServices((prev) => [createdService, ...prev]);
 
             setAddOpen(false);
             setNewRepoName('');
@@ -326,7 +326,7 @@ export function ServiceListManager({
         }
     };
 
-    const runDeleteProject = async () => {
+    const runDeleteService = async () => {
         if (!deleteTarget) return;
         setDeleteLoading(true);
         try {
@@ -336,8 +336,8 @@ export function ServiceListManager({
             const json = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(json.error || 'Delete failed');
 
-            setProjects((prev) => prev.filter((project) => project.id !== deleteTarget.id));
-            if (selectedProjectId === deleteTarget.id) setSelectedProjectId(null);
+            setServices((prev) => prev.filter((service) => service.id !== deleteTarget.id));
+            if (selectedServiceId === deleteTarget.id) setSelectedServiceId(null);
             setDeleteTarget(null);
             toast.success('Service marked as deleted');
         } catch (error) {
@@ -391,22 +391,22 @@ export function ServiceListManager({
             </div>
 
             <ServiceDetailModal
-                project={selectedProject}
-                isOpen={Boolean(selectedProject)}
-                onClose={() => setSelectedProjectId(null)}
-                tags={selectedProjectTags}
+                service={selectedService}
+                isOpen={Boolean(selectedService)}
+                onClose={() => setSelectedServiceId(null)}
+                tags={selectedServiceTags}
             />
 
             {viewMode === 'card' ? (
                 <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                    {filteredProjects.map((project) => {
-                        const displayName = project.alias?.trim() ? project.alias : project.repo_name;
-                        const typeStyle = getTypeStyle(project.type, projectTypes);
+                    {filteredServices.map((service) => {
+                        const displayName = service.alias?.trim() ? service.alias : service.repo_name;
+                        const typeStyle = getTypeStyle(service.type, serviceTypes);
                         return (
                             <div
-                                key={project.id}
-                                onClick={() => handleProjectClick(project.id)}
-                                className={`group relative cursor-pointer overflow-hidden rounded-xl border bg-black/20 p-6 transition-all duration-300 backdrop-blur-md ${project.visibility === 'HIDDEN'
+                                key={service.id}
+                                onClick={() => handleServiceClick(service.id)}
+                                className={`group relative cursor-pointer overflow-hidden rounded-xl border bg-black/20 p-6 transition-all duration-300 backdrop-blur-md ${service.visibility === 'HIDDEN'
                                     ? 'border-white/5 opacity-50'
                                     : 'border-white/5 hover:border-primary/50 hover:shadow-[0_0_20px_rgba(139,92,246,0.1)]'
                                     }`}
@@ -420,43 +420,43 @@ export function ServiceListManager({
                                                 className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10"
                                                 style={{ backgroundColor: `${typeStyle.color}1A`, color: typeStyle.color }}
                                             >
-                                                <code className="text-lg font-bold">{project.type[0]?.toUpperCase() || '?'}</code>
+                                                <code className="text-lg font-bold">{service.type[0]?.toUpperCase() || '?'}</code>
                                             </div>
                                             <div>
                                                 <h3 className="font-semibold text-white transition-colors group-hover:text-primary">
                                                     {displayName}
                                                 </h3>
-                                                <p className="text-xs text-muted-foreground">{project.repo_name}</p>
+                                                <p className="text-xs text-muted-foreground">{service.repo_name}</p>
                                             </div>
                                         </div>
                                         <span
-                                            className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ${project.visibility === 'VISIBLE'
+                                            className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ${service.visibility === 'VISIBLE'
                                                 ? 'bg-green-400/10 text-green-400 ring-green-400/20'
                                                 : 'bg-gray-400/10 text-gray-400 ring-gray-400/20'
                                                 }`}
                                         >
-                                            {project.visibility}
+                                            {service.visibility}
                                         </span>
                                     </div>
 
                                     <div className="mt-4 text-xs text-gray-400">
-                                        Inbound {project.inbound_count} / Outbound {project.outbound_count}
+                                        Inbound {service.inbound_count} / Outbound {service.outbound_count}
                                     </div>
 
                                     <div className="mt-6" onClick={(event) => event.stopPropagation()}>
                                         <TagManager
-                                            tags={project.tags}
+                                            tags={service.tags}
                                             availableTags={availableTags}
                                             isEditMode={isEditMode}
-                                            onAddTag={(tagId) => handleAddTag(project.id, tagId)}
-                                            onRemoveTag={(tagId) => handleRemoveTag(project.id, tagId)}
+                                            onAddTag={(tagId) => handleAddTag(service.id, tagId)}
+                                            onRemoveTag={(tagId) => handleRemoveTag(service.id, tagId)}
                                         />
                                     </div>
                                 </div>
                             </div>
                         );
                     })}
-                    {filteredProjects.length === 0 && (
+                    {filteredServices.length === 0 && (
                         <div className="col-span-full py-12 text-center text-gray-500">
                             조건에 맞는 서비스가 없습니다.
                         </div>
@@ -465,7 +465,7 @@ export function ServiceListManager({
             ) : (
                 <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20 pb-12 backdrop-blur-md">
                     <div className="flex items-center justify-between border-b border-white/10 p-4">
-                        <span className="text-sm text-gray-400">Total {filteredProjects.length} Services</span>
+                        <span className="text-sm text-gray-400">Total {filteredServices.length} Services</span>
                         <button
                             onClick={() => setIsEditMode((prev) => !prev)}
                             className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors ${isEditMode
@@ -490,34 +490,34 @@ export function ServiceListManager({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
-                            {filteredProjects.map((project) => {
-                                const style = getTypeStyle(project.type, projectTypes);
+                            {filteredServices.map((service) => {
+                                const style = getTypeStyle(service.type, serviceTypes);
                                 return (
                                     <tr
-                                        key={project.id}
-                                        onClick={() => handleProjectClick(project.id)}
+                                        key={service.id}
+                                        onClick={() => handleServiceClick(service.id)}
                                         className="cursor-pointer transition-colors hover:bg-white/5"
                                     >
                                         <td className="px-6 py-4 font-medium text-white" onClick={(event) => event.stopPropagation()}>
                                             <div className="flex flex-col gap-1">
-                                                <span>{project.repo_name}</span>
+                                                <span>{service.repo_name}</span>
                                                 {isEditMode ? (
                                                     <input
-                                                        defaultValue={project.alias || ''}
+                                                        defaultValue={service.alias || ''}
                                                         placeholder="alias"
                                                         className="w-48 rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white focus:border-primary focus:outline-none"
-                                                        onBlur={(event) => handleAliasSave(project, event.target.value)}
+                                                        onBlur={(event) => handleAliasSave(service, event.target.value)}
                                                         onKeyDown={(event) => {
                                                             if (event.key === 'Enter') {
                                                                 const target = event.target as HTMLInputElement;
-                                                                handleAliasSave(project, target.value);
+                                                                handleAliasSave(service, target.value);
                                                                 target.blur();
                                                             }
                                                         }}
                                                     />
                                                 ) : (
                                                     <span className="text-xs text-gray-500">
-                                                        {project.alias?.trim() ? `alias: ${project.alias}` : 'alias: -'}
+                                                        {service.alias?.trim() ? `alias: ${service.alias}` : 'alias: -'}
                                                     </span>
                                                 )}
                                             </div>
@@ -525,11 +525,11 @@ export function ServiceListManager({
                                         <td className="px-6 py-4" onClick={(event) => event.stopPropagation()}>
                                             {isEditMode ? (
                                                 <select
-                                                    value={project.type}
-                                                    onChange={(event) => handleTypeChange(project, event.target.value)}
+                                                    value={service.type}
+                                                    onChange={(event) => handleTypeChange(service, event.target.value)}
                                                     className="rounded border border-white/10 bg-black/40 px-2 py-1 text-xs text-white focus:border-primary focus:outline-none"
                                                 >
-                                                    {[...new Set([project.type, ...selectableTypeNames])].map((typeName) => (
+                                                    {[...new Set([service.type, ...selectableTypeNames])].map((typeName) => (
                                                         <option key={typeName} value={typeName}>
                                                             {typeName}
                                                         </option>
@@ -540,36 +540,36 @@ export function ServiceListManager({
                                                     className="inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium"
                                                     style={style}
                                                 >
-                                                    {project.type}
+                                                    {service.type}
                                                 </span>
                                             )}
                                         </td>
                                         <td className="px-6 py-4" onClick={(event) => event.stopPropagation()}>
                                             <button
                                                 disabled={!isEditMode}
-                                                onClick={() => toggleVisibility(project)}
+                                                onClick={() => toggleVisibility(service)}
                                                 className={`inline-flex items-center gap-1.5 transition-colors ${isEditMode ? 'cursor-pointer hover:opacity-80' : 'cursor-default'
-                                                    } ${project.visibility === 'VISIBLE' ? 'text-green-400' : 'text-gray-500'
+                                                    } ${service.visibility === 'VISIBLE' ? 'text-green-400' : 'text-gray-500'
                                                     }`}
                                             >
-                                                {project.visibility === 'VISIBLE' ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-                                                {project.visibility}
+                                                {service.visibility === 'VISIBLE' ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                                                {service.visibility}
                                             </button>
                                         </td>
                                         <td className="px-6 py-4" onClick={(event) => event.stopPropagation()}>
                                             <TagManager
-                                                tags={project.tags}
+                                                tags={service.tags}
                                                 availableTags={availableTags}
                                                 isEditMode={isEditMode}
-                                                onAddTag={(tagId) => handleAddTag(project.id, tagId)}
-                                                onRemoveTag={(tagId) => handleRemoveTag(project.id, tagId)}
+                                                onAddTag={(tagId) => handleAddTag(service.id, tagId)}
+                                                onRemoveTag={(tagId) => handleRemoveTag(service.id, tagId)}
                                             />
                                         </td>
                                         <td className="px-6 py-4 text-gray-300">
-                                            {project.inbound_count} / {project.outbound_count}
+                                            {service.inbound_count} / {service.outbound_count}
                                         </td>
                                         <td className="px-6 py-4 text-gray-400">
-                                            {new Date(project.updated_at).toLocaleDateString()}
+                                            {new Date(service.updated_at).toLocaleDateString()}
                                         </td>
                                         <td className="px-6 py-4 text-right" onClick={(event) => event.stopPropagation()}>
                                             <DropdownMenu.Root>
@@ -582,7 +582,7 @@ export function ServiceListManager({
                                                     <DropdownMenu.Content className="z-50 min-w-[170px] rounded-md border border-white/10 bg-[#1a1a1a] p-1 text-sm text-gray-300 shadow-xl">
                                                         <DropdownMenu.Item
                                                             className="cursor-pointer rounded px-2 py-1.5 outline-none hover:bg-primary/20 hover:text-white"
-                                                            onClick={() => handleManageDependencies(project.id)}
+                                                            onClick={() => handleManageDependencies(service.id)}
                                                         >
                                                             <span className="flex items-center gap-2">
                                                                 <Layers className="h-4 w-4" />
@@ -601,7 +601,7 @@ export function ServiceListManager({
                                                         <DropdownMenu.Separator className="my-1 h-px bg-white/10" />
                                                         <DropdownMenu.Item
                                                             className="cursor-pointer rounded px-2 py-1.5 text-red-400 outline-none hover:bg-red-500/20 hover:text-red-400"
-                                                            onClick={() => setDeleteTarget(project)}
+                                                            onClick={() => setDeleteTarget(service)}
                                                         >
                                                             <span className="flex items-center gap-2">
                                                                 <Trash className="h-4 w-4" />
@@ -615,7 +615,7 @@ export function ServiceListManager({
                                     </tr>
                                 );
                             })}
-                            {filteredProjects.length === 0 && (
+                            {filteredServices.length === 0 && (
                                 <tr>
                                     <td colSpan={7} className="py-10 text-center text-gray-500">
                                         조건에 맞는 서비스가 없습니다.
@@ -719,7 +719,7 @@ export function ServiceListManager({
                             </button>
                             <button
                                 type="button"
-                                onClick={runAddProject}
+                                onClick={runAddService}
                                 disabled={addLoading}
                                 className="rounded-md bg-primary px-3 py-2 text-sm text-white hover:bg-primary/90 disabled:opacity-50"
                             >
@@ -744,7 +744,7 @@ export function ServiceListManager({
                 onOpenChange={(open) => {
                     if (!open) setDeleteTarget(null);
                 }}
-                onConfirm={runDeleteProject}
+                onConfirm={runDeleteService}
             />
         </>
     );

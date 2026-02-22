@@ -1,5 +1,5 @@
 export type Visibility = 'VISIBLE' | 'HIDDEN';
-export type ProjectStatus = 'ACTIVE' | 'ARCHIVED' | 'DELETED';
+export type ObjectStatus = 'ACTIVE' | 'ARCHIVED' | 'DELETED';
 export type RelationType = 'call' | 'expose' | 'read' | 'write' | 'produce' | 'consume' | 'depend_on';
 
 export const VISIBILITY = {
@@ -7,18 +7,18 @@ export const VISIBILITY = {
   HIDDEN: 'HIDDEN' as Visibility,
 };
 
-export const DEFAULT_PROJECT_TYPE = 'unknown';
-export const DEFAULT_PROJECT_STATUS: ProjectStatus = 'ACTIVE';
+export const DEFAULT_SERVICE_TYPE = 'unknown';
+export const DEFAULT_OBJECT_STATUS: ObjectStatus = 'ACTIVE';
 
 export interface ServiceObjectMetadata {
   repo_url?: string;
   description?: string | null;
-  project_type?: string;
-  status?: ProjectStatus;
+  service_type?: string;
+  status?: ObjectStatus;
   last_seen_at?: string;
 }
 
-export function inferProjectType(repoName: string, language?: string | null): string {
+export function inferServiceType(repoName: string, language?: string | null): string {
   const name = repoName.toLowerCase();
   const lang = (language || '').toLowerCase();
 
@@ -37,10 +37,10 @@ export function inferProjectType(repoName: string, language?: string | null): st
   if (['go', 'java', 'kotlin', 'python', 'rust', 'c#'].includes(lang)) {
     return 'backend';
   }
-  return DEFAULT_PROJECT_TYPE;
+  return DEFAULT_SERVICE_TYPE;
 }
 
-export function normalizeProjectStatus(input?: string | null): ProjectStatus {
+export function normalizeObjectStatus(input?: string | null): ObjectStatus {
   const value = (input || '').toUpperCase();
   if (value === 'ARCHIVED') return 'ARCHIVED';
   if (value === 'DELETED') return 'DELETED';
@@ -50,7 +50,7 @@ export function normalizeProjectStatus(input?: string | null): ProjectStatus {
 export function buildServiceMetadata(input: {
   repoUrl?: string | null;
   description?: string | null;
-  projectType?: string | null;
+  serviceType?: string | null;
   status?: string | null;
   lastSeenAt?: string | null;
   existing?: unknown;
@@ -61,15 +61,15 @@ export function buildServiceMetadata(input: {
 
   if (typeof input.repoUrl === 'string') base.repo_url = input.repoUrl;
   if (input.description !== undefined) base.description = input.description;
-  if (typeof input.projectType === 'string' && input.projectType.trim()) {
-    base.project_type = input.projectType.trim();
-  } else if (!base.project_type) {
-    base.project_type = DEFAULT_PROJECT_TYPE;
+  if (typeof input.serviceType === 'string' && input.serviceType.trim()) {
+    base.service_type = input.serviceType.trim();
+  } else if (!base.service_type) {
+    base.service_type = DEFAULT_SERVICE_TYPE;
   }
   if (input.status !== undefined) {
-    base.status = normalizeProjectStatus(input.status);
+    base.status = normalizeObjectStatus(input.status);
   } else if (!base.status) {
-    base.status = DEFAULT_PROJECT_STATUS;
+    base.status = DEFAULT_OBJECT_STATUS;
   }
   if (typeof input.lastSeenAt === 'string' && input.lastSeenAt) {
     base.last_seen_at = input.lastSeenAt;
@@ -78,14 +78,14 @@ export function buildServiceMetadata(input: {
   return base;
 }
 
-export function getProjectTypeFromMetadata(metadata: unknown): string {
-  if (!metadata || typeof metadata !== 'object') return DEFAULT_PROJECT_TYPE;
-  const value = (metadata as Record<string, unknown>).project_type;
-  return typeof value === 'string' && value.trim() ? value : DEFAULT_PROJECT_TYPE;
+export function getServiceTypeFromMetadata(metadata: unknown): string {
+  if (!metadata || typeof metadata !== 'object') return DEFAULT_SERVICE_TYPE;
+  const value = (metadata as Record<string, unknown>).service_type;
+  return typeof value === 'string' && value.trim() ? value : DEFAULT_SERVICE_TYPE;
 }
 
-export function getProjectStatusFromMetadata(metadata: unknown): ProjectStatus {
-  if (!metadata || typeof metadata !== 'object') return DEFAULT_PROJECT_STATUS;
+export function getObjectStatusFromMetadata(metadata: unknown): ObjectStatus {
+  if (!metadata || typeof metadata !== 'object') return DEFAULT_OBJECT_STATUS;
   const value = (metadata as Record<string, unknown>).status;
-  return normalizeProjectStatus(typeof value === 'string' ? value : null);
+  return normalizeObjectStatus(typeof value === 'string' ? value : null);
 }

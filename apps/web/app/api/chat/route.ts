@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ChatOpenAI, AzureChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 import { getDb } from '@archi-navi/core';
-import { getProjectTypeFromMetadata } from '@archi-navi/core';
+import { getServiceTypeFromMetadata } from '@archi-navi/core';
 
 async function getContext() {
   const db = await getDb();
@@ -28,7 +28,7 @@ async function getContext() {
         ? (p.metadata as Record<string, unknown>)
         : {};
       const label = p.display_name?.trim() ? p.display_name : p.name;
-      const type = getProjectTypeFromMetadata(metadata);
+      const type = getServiceTypeFromMetadata(metadata);
       const description = typeof metadata.description === 'string' ? metadata.description : 'No description';
       return `- [${type}] ${label}: ${description}`;
     })

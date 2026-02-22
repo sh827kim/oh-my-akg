@@ -2,7 +2,7 @@ import { getDb } from '@archi-navi/core';
 import { DependencyGraph } from '@/components/dependency-graph';
 import { SidePanel } from '@/components/side-panel';
 import { materializeRollup } from '@archi-navi/core';
-import { getProjectTypeFromMetadata } from '@archi-navi/core';
+import { getServiceTypeFromMetadata } from '@archi-navi/core';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +24,7 @@ interface GraphEdgeRow {
   type: string;
 }
 
-interface ProjectTypeRow {
+interface ServiceTypeRow {
   name: string;
   color_hex: string;
 }
@@ -35,7 +35,7 @@ function getNodeColor(type: string, colorMap: Map<string, string>) {
 
 async function getGraphData() {
   const db = await getDb();
-  const typeResult = await db.query<ProjectTypeRow>(`
+  const typeResult = await db.query<ServiceTypeRow>(`
     SELECT name, color_hex
     FROM project_types
   `);
@@ -78,7 +78,7 @@ async function getGraphData() {
   `);
 
   const nodes = projects.rows.map((p) => {
-    const type = getProjectTypeFromMetadata(p.metadata);
+    const type = getServiceTypeFromMetadata(p.metadata);
     return {
       data: {
         id: p.id,

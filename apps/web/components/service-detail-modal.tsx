@@ -6,7 +6,7 @@ import * as Tabs from '@radix-ui/react-tabs';
 import { X, Network, Layers, Tag as TagIcon, Box, Link2 } from 'lucide-react';
 import { TagManager } from '@/components/tag-manager';
 
-interface Project {
+interface Service {
     id: string;
     repo_name: string;
     alias: string | null;
@@ -26,7 +26,7 @@ interface Tag {
 }
 
 interface DependencyItem {
-    project_id: string;
+    service_id: string;
     label: string;
     type: string;
 }
@@ -37,7 +37,7 @@ interface DependenciesResponse {
 }
 
 interface ServiceDetailModalProps {
-    project: Project | null;
+    service: Service | null;
     isOpen: boolean;
     onClose: () => void;
     tags: Tag[];
@@ -51,34 +51,34 @@ function getTypeClass(type: string) {
     return 'bg-gray-500/10 text-gray-400';
 }
 
-export function ServiceDetailModal({ project, isOpen, onClose, tags }: ServiceDetailModalProps) {
-    const [dependenciesByProject, setDependenciesByProject] = useState<Record<string, DependenciesResponse>>({});
-    const [depsErrorsByProject, setDepsErrorsByProject] = useState<Record<string, string>>({});
+export function ServiceDetailModal({ service, isOpen, onClose, tags }: ServiceDetailModalProps) {
+    const [dependenciesByService, setDependenciesByService] = useState<Record<string, DependenciesResponse>>({});
+    const [depsErrorsByService, setDepsErrorsByService] = useState<Record<string, string>>({});
 
     useEffect(() => {
-        if (!project || !isOpen) return;
+        if (!service || !isOpen) return;
 
         let cancelled = false;
-        fetch(`/api/objects/${encodeURIComponent(project.id)}/dependencies`)
+        fetch(`/api/objects/${encodeURIComponent(service.id)}/dependencies`)
             .then(async (res) => {
                 const json = (await res.json()) as DependenciesResponse | { error?: string };
                 if (!res.ok) {
                     throw new Error('error' in json ? json.error : 'Failed to load dependencies');
                 }
                 if (!cancelled) {
-                    setDependenciesByProject((prev) => ({ ...prev, [project.id]: json as DependenciesResponse }));
-                    setDepsErrorsByProject((prev) => {
+                    setDependenciesByService((prev) => ({ ...prev, [service.id]: json as DependenciesResponse }));
+                    setDepsErrorsByService((prev) => {
                         const next = { ...prev };
-                        delete next[project.id];
+                        delete next[service.id];
                         return next;
                     });
                 }
             })
             .catch((error) => {
                 if (!cancelled) {
-                    setDepsErrorsByProject((prev) => ({
+                    setDepsErrorsByService((prev) => ({
                         ...prev,
-                        [project.id]: error instanceof Error ? error.message : 'Failed to load dependencies',
+                        [service.id]: error instanceof Error ? error.message : 'Failed to load dependencies',
                     }));
                 }
             });
@@ -86,16 +86,16 @@ export function ServiceDetailModal({ project, isOpen, onClose, tags }: ServiceDe
         return () => {
             cancelled = true;
         };
-    }, [isOpen, project]);
+    }, [isOpen, service]);
 
-    if (!project) return null;
+    if (!service) return null;
 
-    const dependencies = dependenciesByProject[project.id] ?? { inbound: [], outbound: [] };
-    const depsError = depsErrorsByProject[project.id] ?? null;
-    const loadingDeps = isOpen && !dependenciesByProject[project.id] && !depsError;
-    const hasLoadedDeps = Boolean(dependenciesByProject[project.id] && !depsError);
-    const inboundCount = hasLoadedDeps ? dependencies.inbound.length : project.inbound_count;
-    const outboundCount = hasLoadedDeps ? dependencies.outbound.length : project.outbound_count;
+    const dependencies = dependenciesByService[service.id] ?? { inbound: [], outbound: [] };
+    const depsError = depsErrorsByService[service.id] ?? null;
+    const loadingDeps = isOpen && !dependenciesByService[service.id] && !depsError;
+    const hasLoadedDeps = Boolean(dependenciesByService[service.id] && !depsError);
+    const inboundCount = hasLoadedDeps ? dependencies.inbound.length : service.inbound_count;
+    const outboundCount = hasLoadedDeps ? dependencies.outbound.length : service.outbound_count;
 
     return (
         <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -104,18 +104,18 @@ export function ServiceDetailModal({ project, isOpen, onClose, tags }: ServiceDe
                 <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[820px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0A0A0A] shadow-2xl animate-in zoom-in-95 duration-200 focus:outline-none">
                     <div className="flex items-start justify-between border-b border-white/5 bg-white/[0.02] p-6">
                         <div className="flex items-center gap-4">
-                            <div className={`flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 ${getTypeClass(project.type)}`}>
+                            <div className={`flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 ${getTypeClass(service.type)}`}>
                                 <Box className="h-6 w-6" />
                             </div>
                             <div>
                                 <Dialog.Title className="text-xl font-bold text-white">
-                                    {project.alias?.trim() ? project.alias : project.repo_name}
+                                    {service.alias?.trim() ? service.alias : service.repo_name}
                                 </Dialog.Title>
                                 <div className="mt-1 flex items-center gap-2">
-                                    <span className="text-xs text-gray-500">{project.repo_name}</span>
+                                    <span className="text-xs text-gray-500">{service.repo_name}</span>
                                     <span className="text-xs text-gray-500">•</span>
                                     <span className="text-xs text-gray-500">
-                                        Updated {new Date(project.updated_at).toLocaleDateString()}
+                                        Updated {new Date(service.updated_at).toLocaleDateString()}
                                     </span>
                                 </div>
                             </div>
@@ -157,7 +157,7 @@ export function ServiceDetailModal({ project, isOpen, onClose, tags }: ServiceDe
                                 <div className="space-y-2">
                                     <h3 className="text-sm font-medium uppercase tracking-wider text-gray-400">Description</h3>
                                     <p className="leading-relaxed text-gray-300">
-                                        {project.description || 'No description provided.'}
+                                        {service.description || 'No description provided.'}
                                     </p>
                                 </div>
 
@@ -221,7 +221,7 @@ export function ServiceDetailModal({ project, isOpen, onClose, tags }: ServiceDe
                                                 <ul className="space-y-2">
                                                     {dependencies.inbound.map((item) => (
                                                         <li
-                                                            key={`in-${item.project_id}-${item.type}`}
+                                                            key={`in-${item.service_id}-${item.type}`}
                                                             className="flex items-center justify-between rounded border border-white/10 bg-black/30 px-3 py-2"
                                                         >
                                                             <span className="truncate text-sm text-gray-200">{item.label}</span>
@@ -245,7 +245,7 @@ export function ServiceDetailModal({ project, isOpen, onClose, tags }: ServiceDe
                                                 <ul className="space-y-2">
                                                     {dependencies.outbound.map((item) => (
                                                         <li
-                                                            key={`out-${item.project_id}-${item.type}`}
+                                                            key={`out-${item.service_id}-${item.type}`}
                                                             className="flex items-center justify-between rounded border border-white/10 bg-black/30 px-3 py-2"
                                                         >
                                                             <span className="truncate text-sm text-gray-200">{item.label}</span>
@@ -264,19 +264,19 @@ export function ServiceDetailModal({ project, isOpen, onClose, tags }: ServiceDe
                             <Tabs.Content value="metadata" className="space-y-6 outline-none">
                                 <div className="grid grid-cols-[140px_1fr] gap-4 text-sm">
                                     <span className="text-gray-500">Repository ID</span>
-                                    <span className="font-mono text-gray-300">{project.id}</span>
+                                    <span className="font-mono text-gray-300">{service.id}</span>
 
                                     <span className="text-gray-500">Type</span>
-                                    <span className="text-gray-300">{project.type}</span>
+                                    <span className="text-gray-300">{service.type}</span>
 
                                     <span className="text-gray-500">Visibility</span>
-                                    <span className="text-gray-300">{project.visibility}</span>
+                                    <span className="text-gray-300">{service.visibility}</span>
 
                                     <span className="text-gray-500">Status</span>
-                                    <span className="text-gray-300">{project.status}</span>
+                                    <span className="text-gray-300">{service.status}</span>
 
                                     <span className="text-gray-500">Last Updated</span>
-                                    <span className="text-gray-300">{new Date(project.updated_at).toLocaleString()}</span>
+                                    <span className="text-gray-300">{new Date(service.updated_at).toLocaleString()}</span>
                                 </div>
                             </Tabs.Content>
                         </div>

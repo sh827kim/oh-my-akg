@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { getDb } from '@archi-navi/core';
-import { buildServiceMetadata, getProjectStatusFromMetadata } from '@archi-navi/core';
+import { buildServiceMetadata, getObjectStatusFromMetadata } from '@archi-navi/core';
 
 interface ProjectRow {
   id: string;
@@ -39,7 +39,7 @@ function toProjectRow(row: ServiceObjectRow): ProjectRow {
     : {};
 
   const type = typeof metadata.project_type === 'string' ? metadata.project_type : 'unknown';
-  const status = getProjectStatusFromMetadata(metadata);
+  const status = getObjectStatusFromMetadata(metadata);
 
   return {
     id: row.urn || row.object_id,
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
     const metadata = buildServiceMetadata({
       repoUrl: '#',
       description,
-      projectType: type || 'unknown',
+      serviceType: type || 'unknown',
       status: 'ACTIVE',
       lastSeenAt: new Date().toISOString(),
     });

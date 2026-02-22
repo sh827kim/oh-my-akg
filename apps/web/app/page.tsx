@@ -1,6 +1,6 @@
 import { getDb } from '@archi-navi/core';
-import { ServiceListManager } from '@/components/project-list-manager';
-import { getProjectStatusFromMetadata, getProjectTypeFromMetadata } from '@archi-navi/core';
+import { ServiceListManager } from '@/components/service-list-manager';
+import { getObjectStatusFromMetadata, getServiceTypeFromMetadata } from '@archi-navi/core';
 
 interface Tag {
   id: string;
@@ -8,7 +8,7 @@ interface Tag {
   color: string;
 }
 
-interface ProjectType {
+interface ServiceType {
   id: number;
   name: string;
   color: string;
@@ -106,9 +106,9 @@ async function getProjects() {
         repo_name: p.name,
         alias: p.display_name,
         description: typeof metadata.description === 'string' ? metadata.description : null,
-        type: getProjectTypeFromMetadata(metadata),
+        type: getServiceTypeFromMetadata(metadata), // Renamed from serviceType to type
         visibility: p.visibility,
-        status: getProjectStatusFromMetadata(metadata),
+        status: getObjectStatusFromMetadata(metadata),
         updated_at: p.updated_at.toISOString(),
         last_seen_at: typeof metadata.last_seen_at === 'string' ? metadata.last_seen_at : null,
         inbound_count: Number(p.inbound_count ?? 0),
@@ -139,7 +139,7 @@ async function getSettingsData() {
     `),
   ]);
 
-  const projectTypes: ProjectType[] = typesResult.rows.map((row) => ({
+  const serviceTypes: ServiceType[] = typesResult.rows.map((row) => ({
     id: row.id,
     name: row.name,
     color: row.color_hex,
@@ -153,7 +153,7 @@ async function getSettingsData() {
     color: row.color_hex,
   }));
 
-  return { projectTypes, availableTags };
+  return { serviceTypes, availableTags };
 }
 
 export default async function Home({
@@ -169,9 +169,9 @@ export default async function Home({
     <div className="flex-1 overflow-auto p-8">
       <div className="mx-auto max-w-7xl">
         <ServiceListManager
-          initialProjects={projects}
+          initialServices={projects}
           availableTags={settings.availableTags}
-          projectTypes={settings.projectTypes}
+          serviceTypes={settings.serviceTypes}
           viewMode={viewMode}
         />
       </div>
