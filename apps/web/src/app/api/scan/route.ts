@@ -3,7 +3,10 @@
  * CLI와 동일한 로직을 Web API로 제공
  */
 import { type NextRequest, NextResponse } from 'next/server';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -103,15 +106,69 @@ function checkGhAuth(): void {
 interface GhRepo { name: string; url: string }
 
 function listOrgRepos(org: string): GhRepo[] {
-  const stdout = execFileSync(
-    'gh', ['repo', 'list', org, '--json', 'name,url', '--limit', '200'],
-    { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
-  );
-  return JSON.parse(stdout) as GhRepo[];
+  try {
+    const stdout = execFileSync(
+      'gh', ['repo', 'list', org, '--json', 'name,url', '--limit', '200'],
+      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
+    );
+    return JSON.parse(stdout) as GhRepo[];
+  } catch (err) {
+    // execFileSync 실패 시 stderr가 err.message에 포함됨
+    const msg = err instanceof Error ? err.message : String(err);
+
+    // Org를 찾지 못한 경우 (이름 오타 or Private Org 권한 부족)
+    if (
+      msg.includes('not recognized') ||
+      msg.includes('Could not resolve') ||
+      msg.includes('Could not find')
+    ) {
+      throw new Error(
+        `GitHub Org '${org}'를 찾을 수 없습니다.\n` +
+        `• Org 이름이 정확한지 확인하세요.\n` +
+        `• Private Org라면 'gh auth refresh -s read:org' 실행 후 재시도하세요.`,
+      );
+    }
+
+    // 그 외 gh 실행 오류 (네트워크, 권한 등)
+    throw new Error(`GitHub Org 레포 목록 조회 실패: ${msg}`);
+  }
 }
 
 function cloneRepo(nwo: string, targetDir: string): void {
   execFileSync('gh', ['repo', 'clone', nwo, targetDir, '--', '--depth', '1'], { stdio: 'pipe' });
+}
+
+/**
+ * GitHub API로 레포 루트 파일 목록을 조회해서 언어/마커 파일을 감지.
+ * clone 없이 API 한 번 호출로 끝나므로 매우 빠름.
+ */
+async function detectProjectFromGitHub(
+  owner: string,
+  repo: string,
+): Promise<DiscoveredProject | null> {
+  try {
+    // gh api 로 루트 파일 이름 목록만 추출 (--jq 사용)
+    const { stdout } = await execFileAsync(
+      'gh',
+      ['api', `repos/${owner}/${repo}/contents/`, '--jq', '.[].name'],
+      { encoding: 'utf-8' },
+    );
+    const files = stdout.trim().split('\n').filter(Boolean);
+
+    for (const [marker, lang] of Object.entries(MARKER_MAP)) {
+      if (files.includes(marker)) {
+        return {
+          name: repo,
+          path: `https://github.com/${owner}/${repo}`,
+          language: lang,
+          markerFile: marker,
+        };
+      }
+    }
+    return null; // 마커 파일 없음 → 프로젝트 아님
+  } catch {
+    return null; // 접근 불가(private/삭제됨 등) → 건너뜀
+  }
 }
 
 function createTempDir(prefix: string): string {
@@ -159,76 +216,147 @@ async function registerProjects(
   return { registered, skipped };
 }
 
-/* ─── POST /api/scan ─── */
+/* ─── POST /api/scan (SSE 스트리밍) ─── */
 export async function POST(req: NextRequest) {
+  // body 파싱 실패는 스트림 시작 전에 처리
+  let body: ScanRequest;
   try {
-    const body = (await req.json()) as ScanRequest;
-    const workspaceId = body.workspaceId || DEFAULT_WORKSPACE_ID;
-    const mode: ScanMode = body.mode || 'local';
-    const target = body.target;
-    const dryRun = body.dryRun ?? false;
-
-    if (!target) {
-      return NextResponse.json({ error: 'target은 필수입니다' }, { status: 400 });
-    }
-
-    let projects: DiscoveredProject[] = [];
-
-    switch (mode) {
-      case 'local': {
-        const single = detectSingleProject(target);
-        projects = single ? [single] : detectProjects(target);
-        break;
-      }
-      case 'workspace-dir': {
-        projects = detectProjects(target);
-        break;
-      }
-      case 'github-repo': {
-        checkGhAuth();
-        const tmpDir = createTempDir('repo');
-        try {
-          cloneRepo(target, path.join(tmpDir, target.split('/').pop() ?? 'repo'));
-          projects = detectProjects(tmpDir);
-        } finally {
-          fs.rmSync(tmpDir, { recursive: true, force: true });
-        }
-        break;
-      }
-      case 'github-org': {
-        checkGhAuth();
-        const repos = listOrgRepos(target);
-        const tmpDir = createTempDir('org');
-        try {
-          for (const repo of repos) {
-            const repoDir = path.join(tmpDir, repo.name);
-            try {
-              cloneRepo(`${target}/${repo.name}`, repoDir);
-              const detected = detectSingleProject(repoDir);
-              if (detected) projects.push(detected);
-            } catch { /* 개별 실패 건너뜀 */ }
-          }
-        } finally {
-          fs.rmSync(tmpDir, { recursive: true, force: true });
-        }
-        break;
-      }
-    }
-
-    // 언어 필터
-    if (body.lang) {
-      const langs = body.lang.split(',').map((l) => l.trim().toLowerCase());
-      projects = projects.filter((p) => langs.includes(p.language));
-    }
-
-    // DB 등록
-    const { registered, skipped } = await registerProjects(workspaceId, projects, dryRun);
-
-    const result: ScanResult = { mode, target, projects, registered, skipped };
-    return NextResponse.json(result);
-  } catch (error) {
-    console.error('[POST /api/scan]', error);
-    const msg = error instanceof Error ? error.message : 'Internal Server Error';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    body = (await req.json()) as ScanRequest;
+  } catch {
+    return NextResponse.json({ error: '잘못된 요청 형식' }, { status: 400 });
   }
+
+  const workspaceId = body.workspaceId || DEFAULT_WORKSPACE_ID;
+  const mode: ScanMode = body.mode || 'local';
+  const target = body.target;
+  const dryRun = body.dryRun ?? false;
+
+  if (!target) {
+    return NextResponse.json({ error: 'target은 필수입니다' }, { status: 400 });
+  }
+
+  const encoder = new TextEncoder();
+
+  /*
+   * SSE(Server-Sent Events) 스트리밍 응답:
+   * 각 레포 처리 진행 상황을 실시간으로 클라이언트에 전달.
+   *
+   * 이벤트 형식:
+   *   { type: 'start',    total: number }
+   *   { type: 'progress', current: number, total: number, message: string }
+   *   { type: 'complete', result: ScanResult }
+   *   { type: 'error',    message: string }
+   */
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (data: object) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+      };
+
+      try {
+        let projects: DiscoveredProject[] = [];
+
+        switch (mode) {
+          case 'local': {
+            const single = detectSingleProject(target);
+            projects = single ? [single] : detectProjects(target);
+            break;
+          }
+          case 'workspace-dir': {
+            projects = detectProjects(target);
+            break;
+          }
+          case 'github-repo': {
+            checkGhAuth();
+            const tmpDir = createTempDir('repo');
+            try {
+              cloneRepo(target, path.join(tmpDir, target.split('/').pop() ?? 'repo'));
+              projects = detectProjects(tmpDir);
+            } finally {
+              fs.rmSync(tmpDir, { recursive: true, force: true });
+            }
+            break;
+          }
+          case 'github-org': {
+            checkGhAuth();
+            const repos = listOrgRepos(target);
+            send({ type: 'start', total: repos.length });
+
+            if (dryRun) {
+              /*
+               * 미리보기: GitHub API로 루트 파일만 조회 (clone 없음)
+               *   - 디스크 I/O 없음, 훨씬 빠름
+               *   - 동시 10개 배치로 부하 제한
+               */
+              const BATCH = 10;
+              for (let i = 0; i < repos.length; i += BATCH) {
+                const end = Math.min(i + BATCH, repos.length);
+                send({
+                  type: 'progress',
+                  current: i,
+                  total: repos.length,
+                  message: `${end} / ${repos.length} 레포 확인 중...`,
+                });
+                const batch = repos.slice(i, i + BATCH);
+                const results = await Promise.all(
+                  batch.map((r) => detectProjectFromGitHub(target, r.name)),
+                );
+                projects.push(...results.filter((p): p is DiscoveredProject => p !== null));
+              }
+            } else {
+              /*
+               * 실제 스캔: 레포를 clone하여 추론 엔진이 코드를 직접 분석할 수 있도록 준비.
+               *   - 미래의 inference pipeline에서 tmpDir 경로를 사용
+               */
+              const tmpDir = createTempDir('org');
+              try {
+                for (let i = 0; i < repos.length; i++) {
+                  const repo = repos[i]!;
+                  send({
+                    type: 'progress',
+                    current: i,
+                    total: repos.length,
+                    message: `${repo.name} 클로닝 중... (${i + 1} / ${repos.length})`,
+                  });
+                  const repoDir = path.join(tmpDir, repo.name);
+                  try {
+                    cloneRepo(`${target}/${repo.name}`, repoDir);
+                    const detected = detectSingleProject(repoDir);
+                    if (detected) projects.push(detected);
+                  } catch { /* 개별 실패 건너뜀 */ }
+                }
+              } finally {
+                fs.rmSync(tmpDir, { recursive: true, force: true });
+              }
+            }
+            break;
+          }
+        }
+
+        // 언어 필터
+        if (body.lang) {
+          const langs = body.lang.split(',').map((l) => l.trim().toLowerCase());
+          projects = projects.filter((p) => langs.includes(p.language));
+        }
+
+        // DB 등록
+        const { registered, skipped } = await registerProjects(workspaceId, projects, dryRun);
+        const result: ScanResult = { mode, target, projects, registered, skipped };
+        send({ type: 'complete', result });
+      } catch (err) {
+        console.error('[POST /api/scan]', err);
+        send({ type: 'error', message: err instanceof Error ? err.message : '스캔 중 오류 발생' });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
 }

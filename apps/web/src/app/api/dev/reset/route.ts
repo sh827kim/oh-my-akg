@@ -10,6 +10,7 @@ import {
   objectRelations,
   relationCandidates,
   architectureLayers,
+  tags,
 } from '@archi-navi/db';
 import { eq } from 'drizzle-orm';
 import { DEFAULT_WORKSPACE_ID } from '@archi-navi/shared';
@@ -44,6 +45,11 @@ export async function POST(req: NextRequest) {
     await db
       .delete(architectureLayers)
       .where(eq(architectureLayers.workspaceId, workspaceId));
+
+    // 5. 태그 삭제 (object_tags는 objects 삭제 시 이미 CASCADE 처리됨)
+    await db
+      .delete(tags)
+      .where(eq(tags.workspaceId, workspaceId));
 
     return NextResponse.json({ ok: true });
   } catch (error) {
