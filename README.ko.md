@@ -1,211 +1,277 @@
 # Archi.Navi
 
-> MSA 팀을 위한 살아있는 아키텍처 지도\
+[English](README.md)
+
+> 분산 서비스 환경을 위한 Local-first 아키텍처 내비게이션 도구
 > *추측하지 말고, 구조를 직접 확인하세요.*
 
-------------------------------------------------------------------------
+---
 
-## 🚨 이런 고민, 해보신 적 있으신가요?
+## 이런 고민, 해보신 적 있으신가요?
 
 마이크로서비스를 운영하다 보면 다음과 같은 상황을 자주 겪게 됩니다.
 
--   이 서비스는 정확히 어떤 서비스를 의존하고 있을까?
--   작은 수정이 왜 예상치 못한 다른 장애로 이어졌을까?
--   문서와 실제 구조가 이미 달라진 건 아닐까?
--   API/MQ/DB 흐름을 한 번에 설명할 수 있을까?
+- 이 변경이 어떤 서비스에 영향을 줄까?
+- 작은 수정이 왜 예상치 못한 다른 장애로 이어졌을까?
+- 아키텍처 다이어그램이 실제와 여전히 일치할까?
+- 이 Kafka 토픽 / DB 테이블 / API 엔드포인트는 누가 관리하고 있을까?
 
-MSA는 문서보다 빠르게 변화합니다.\
-그래서 정적인 다이어그램보다 **현재 상태를 반영하는 구조 지도**가
-필요합니다.
+MSA는 정적 문서보다 빠르게 변화합니다.
 
-**Archi.Navi**는 GitHub 조직 기반 레포 구조를 분석하고,\
-승인 기반 워크플로우와 함께 탐색 가능한 아키텍처 지도를 제공합니다.
+**Archi.Navi**는 이 간극을 해소합니다. 소스코드와 설정을 분석해 **탐색 가능한 아키텍처 지도**를 만들고,
+승인 기반 워크플로우와 Evidence 중심 AI Chat을 통해 현실을 반영한 구조를 유지합니다.
 
-------------------------------------------------------------------------
+---
 
-## 🧩 핵심 개념
+## 핵심 개념
 
-Archi.Navi를 처음 사용할 때 아래 용어를 먼저 이해하면 전체 동작이 빠르게
-정리됩니다.
+| 용어 | 설명 |
+|------|------|
+| **Object** | 통합 모델 단위. 서비스, API 엔드포인트, DB, 테이블, 토픽, 큐 — 모두 `Object`로 표현 |
+| **Relation** | 오브젝트 간 타입 있는 연결 (`call`, `read`, `write`, `produce`, `consume`, `expose`, `depend_on`) |
+| **Roll-up View** | 빠른 영향도 분석을 위한 요약 구조 관점 (서비스 간, 도메인 간) |
+| **Roll-down View** | 특정 오브젝트를 기준으로 원자 단위까지 상세 흐름을 파고드는 관점 |
+| **승인 큐** | 자동 추론 결과를 즉시 반영하지 않고, 승인/반려를 거쳐 적용 |
+| **Evidence** | 추론된 관계 또는 AI 응답을 뒷받침하는 근거 (파일 경로, 라인, 발췌문) |
+| **Workspace** | 멀티 레포/멀티 조직 확장을 위한 논리적 격리 단위 |
 
--   **Object(오브젝트)**
-    Archi.Navi의 통합 모델 단위입니다. 서비스, API 엔드포인트, 데이터베이스,
-    테이블, 토픽, 큐 등을 모두 `Object`로 표현합니다.
--   **Service(서비스)**
-    `Object` 타입 중 하나(`object_type=service`)이며, 운영 관점의 핵심 경계입니다.
--   **Relation(릴레이션)**
-    오브젝트 간 연결 의미입니다. `call`, `read`, `write`, `produce`,
-    `consume`, `expose`, `depend_on` 같은 타입으로 구분합니다.
--   **Roll-up View**
-    빠른 영향도 분석을 위한 요약 구조 관점입니다.
--   **Roll-down View**
-    특정 오브젝트를 기준으로 상세 흐름을 파고드는 관점입니다.
--   **Change Request(승인 큐)**
-    자동 추론 결과를 즉시 반영하지 않고, 승인/반려를 거쳐 반영하는 단계입니다.
--   **Evidence(근거)**
-    추론된 관계나 AI 응답을 뒷받침하는 근거 정보입니다.
--   **Visibility**
-    `VISIBLE` / `HIDDEN`으로 기본 화면 노출 여부를 제어합니다.
--   **Workspace**
-    향후 멀티 ORG/레포 확장을 위한 논리적 격리 단위입니다.
+---
 
-이 개념들을 기준으로 보면, Archi.Navi의 화면과 승인 흐름이 훨씬 명확해집니다.
+## 주요 기능
 
-------------------------------------------------------------------------
+### 1. 서비스 목록 (Service Overview)
 
-## 🧭 주요 기능
+- 서비스 목록 조회, 검색, 태그, 가시성 관리
+- Alias / Type / Visibility 편집
+- CSV Export
 
-### 1️⃣ Service Overview
+### 2. 아키텍처 뷰 (Architecture View)
 
--   서비스 목록 조회 및 검색
--   Alias / Type / Visibility 편집
--   Tag 추가/수정
--   CSV Export
+- 레이어드 아키텍처 시각화 (Roll-up 관점)
+- 드래그 앤 드롭 레이어 관리
+- PNG Export
 
-팀 공통 구조 언어를 유지하면서 서비스 정보를 관리할 수 있습니다.
+### 3. Object Mapping View
 
-------------------------------------------------------------------------
+- 인터랙티브 의존성 그래프 (Roll-up & Roll-down)
+- 엣지 타입 필터링 (`call`, `read`, `write`, `produce`, `consume`)
+- 뷰 레벨 전환: Domain → Service → Atomic
 
-### 2️⃣ Dependency Graph
+### 4. 승인 워크플로우 (Approval Workflow)
 
--   서비스 의존성 시각화
--   특정 노드 선택 시 Inbound / Outbound 확인
--   검색 기반 하이라이트
--   Visibility(`VISIBLE` / `HIDDEN`) 기반 숨김
+- 자동 추론 관계는 모두 `PENDING` 큐에 적재 후 검토
+- Evidence 확인 후 일괄 승인/반려
+- 수동 오버라이드는 항상 자동 추론보다 우선
 
-릴리스 전 변경 영향 범위를 빠르게 파악할 수 있습니다.
+### 5. AI Chat (Evidence 중심)
 
-------------------------------------------------------------------------
+- 실제 그래프 데이터 기반 아키텍처 질의 응답
+- Confidence + Evidence 기반 응답
+- OpenAI, Anthropic, Google 멀티 프로바이더 지원 (Vercel AI SDK)
+- Evidence 없는 확정형 답변 금지
 
-### 3️⃣ Architecture View + Object Mapping View
+---
 
--   Architecture View: 상위 roll-up 구조
--   Object Mapping View: drill-down / roll-down 상세 탐색
--   엣지 타입별 필터링
--   PNG Export
+## 레포 구조
 
-전체 구조와 상세 흐름을 같은 제품 안에서 연속적으로 확인할 수 있습니다.
-
-------------------------------------------------------------------------
-
-### 4️⃣ Approval Workflow
-
--   자동 추론 결과를 `change_requests`에 적재
--   선택 기반 일괄 승인/반려
--   승인 후 관계 반영
-
-자동화의 속도와 운영 데이터 신뢰성을 함께 확보합니다.
-
-------------------------------------------------------------------------
-
-### 5️⃣ AI Chat (evidence 중심)
-
--   구조 질의 응답
--   confidence + evidence 기반 응답
--   evidence 없는 확정형 답변 금지 정책
-
-------------------------------------------------------------------------
-
-## ✅ 이런 팀에 적합합니다
-
--   MSA를 실제로 운영 중인 팀
--   여러 레포지토리를 동시에 관리하는 조직
--   변경 영향 분석이 중요한 플랫폼/백엔드 팀
--   신규 온보딩 구조 설명 비용이 큰 팀
--   아키텍처 문서를 최신으로 유지하기 어려운 프로젝트
-
-------------------------------------------------------------------------
-
-## 🏗 레포 구조
-
-```text
-apps/
-  web/                 # Next.js UI
-packages/
-  core/                # object/relation 모델, roll-up
-  inference/           # 추론 파이프라인 + AST 플러그인 뼈대
-  cli/                 # sync/status/approvals/up 명령
-  config/              # 공통 설정/github 유틸
+```
+archi-navi/
+├── apps/
+│   └── web/                    # Next.js 16 앱 (UI + API Routes)
+│       ├── (dashboard)/        # Architecture View, Services, Approval, Chat
+│       └── api/                # REST API 라우트
+│
+└── packages/
+    ├── core/                   # 쿼리 엔진 (BFS/DFS), Rollup, 그래프 인덱스
+    ├── inference/              # Relation & Domain 추론 엔진
+    ├── db/                     # Drizzle ORM 스키마 + 마이그레이션
+    ├── cli/                    # CLI (scan, infer, rebuild-rollup, export, snapshot)
+    ├── shared/                 # 공유 타입, 상수, 유틸리티
+    └── ui/                     # 공유 shadcn/ui 컴포넌트
 ```
 
-------------------------------------------------------------------------
+---
 
-## 🛠 기술 스택
+## 기술 스택
 
--   Next.js (App Router)
--   React + TypeScript
--   Cytoscape.js (Graph 시각화)
--   PGlite (로컬 Postgres 호환 DB)
--   Radix UI
--   Sonner
+| 계층 | 기술 |
+|------|------|
+| 프론트엔드 | Next.js 16 (App Router) + React 19 + TypeScript |
+| UI 라이브러리 | TailwindCSS 4 + shadcn/ui |
+| 그래프 시각화 | Cytoscape.js + React Flow |
+| 상태 관리 | Zustand |
+| 데이터베이스 | PGlite (로컬) / PostgreSQL 17 (팀 배포) |
+| ORM | Drizzle ORM |
+| AI / LLM | Vercel AI SDK (OpenAI, Anthropic, Google) |
+| 모노레포 | Turborepo + pnpm |
+| CLI | Commander.js + tsx |
+| 테스트 | Vitest + Playwright |
 
-------------------------------------------------------------------------
+---
 
-## 🚀 실행 방법
+## 시작하기
 
-### 1. 의존성 설치
+### 사전 요구사항
+
+- Node.js 22.x LTS
+- pnpm 10.x
+
+### 설치
 
 ```bash
+# 저장소 클론
+git clone https://github.com/your-org/archi-navi.git
+cd archi-navi
+
+# 의존성 설치
 pnpm install
+
+# 환경변수 설정
+cp .env.example .env.local
+# .env.local 편집 — 최소한 AI_API_KEY 설정 필요
 ```
 
-### 2. 개발 서버 실행
+### 환경변수
+
+```env
+# DB — 기본적으로 PGlite 사용 (별도 설치 불필요)
+# PostgreSQL 사용 시 아래 주석 해제
+# DATABASE_URL=postgresql://postgres:password@localhost:5432/archinavi
+
+# PGlite 데이터 저장 경로 (기본: .archi-navi/data)
+PGLITE_DATA_DIR=.archi-navi/data
+
+# AI 프로바이더: openai | anthropic | google
+AI_PROVIDER=openai
+AI_API_KEY=sk-your-api-key
+AI_MODEL=gpt-4.1
+
+# 앱
+NODE_ENV=development
+PORT=3000
+```
+
+### 개발 서버 실행
 
 ```bash
 pnpm dev
 ```
 
-브라우저에서 다음 주소로 접속합니다:
+브라우저에서 [http://localhost:3000](http://localhost:3000)으로 접속합니다.
 
-    http://localhost:3000
+---
 
-------------------------------------------------------------------------
-
-## 🧑‍💻 CLI 사용
+## 주요 스크립트
 
 ```bash
-pnpm cli sync <org>
-pnpm cli status
-pnpm cli approvals list
-pnpm cli approvals apply --all --dry-run
-pnpm cli up
+pnpm dev            # 개발 서버 실행 (Next.js + HMR)
+pnpm build          # 프로덕션 빌드
+pnpm test           # 전체 테스트 실행
+pnpm lint           # ESLint 검사
+pnpm format         # Prettier 포맷팅
+pnpm db:generate    # 스키마에서 Drizzle 마이그레이션 생성
+pnpm db:migrate     # 마이그레이션 적용
+pnpm db:studio      # Drizzle Studio 열기 (DB 브라우저)
 ```
 
-패키지 실행 형태:
+---
+
+## CLI 사용법
+
+CLI는 소스코드 스캔, 추론 실행, 데이터 관리에 사용합니다.
 
 ```bash
-npx archi-navi up
+# 소스코드 및 설정 파일 스캔
+archi-navi scan --path /path/to/project --mode code
+
+# 관계/도메인 추론 실행
+archi-navi infer --workspace <workspaceId>
+
+# Rollup 그래프 재빌드
+archi-navi rebuild-rollup --workspace <workspaceId>
+
+# 데이터 내보내기
+archi-navi export --format json --output ./export.json
+
+# 현재 상태 스냅샷 저장
+archi-navi snapshot
 ```
 
-`.env` 예시:
+스캔 모드: `code` | `db` | `config` | `all`
 
-```env
-GITHUB_TOKEN=your_token
-GITHUB_ORG=your_org
-OPENAI_API_KEY=your_openai_key
-ARCHI_NAVI_DB_PATH=data/akg-db
-```
+---
 
-------------------------------------------------------------------------
+## 추론 엔진
 
-## 🗄 데이터 및 스키마
+Archi.Navi는 소스코드에서 관계를 자동으로 추론합니다.
 
--   기본 DB 경로: `data/akg-db`
--   경로 오버라이드: `ARCHI_NAVI_DB_PATH` (또는 `AKG_DB_PATH`)
--   스키마: `scripts/schema.sql`
+| 신호 소스 | 추론 관계 | 예시 |
+|-----------|----------|------|
+| HTTP 클라이언트 호출 | `call` | `RestTemplate.getForObject(...)` |
+| API 컨트롤러 선언 | `expose` | `@GetMapping("/api/orders")` |
+| 메시지 프로듀서 | `produce` | `kafkaTemplate.send("order.created")` |
+| 메시지 컨슈머 | `consume` | `@KafkaListener(topics="order.created")` |
+| DB SELECT | `read` | JPA Repository, MyBatis XML |
+| DB INSERT/UPDATE | `write` | JPA Repository, MyBatis XML |
 
-------------------------------------------------------------------------
+도메인 추론은 두 가지 트랙을 지원합니다.
+- **Track A (Seed 기반)**: 사용자가 도메인 이름을 정의하면, 엔진이 Affinity 점수를 계산
+- **Track B (Seed-less Discovery)**: 관계 그래프에서 Louvain 커뮤니티 탐지로 도메인 자동 발견
 
-## 📚 제품 문서
+모든 추론 결과는 **승인 큐**를 거친 후 적용됩니다.
 
--   PRD: `docs/prd/PRD.md`
--   Object Model Spec: `docs/spec/object-model-definition.md`
--   Implementation Spec: `docs/spec/2026-02-20_implementation-spec-core-api.md`
--   마스터 로드맵: `docs/tasks/2026-02-20_master-roadmap-and-task-breakdown.md`
+---
 
-------------------------------------------------------------------------
+## 데이터 모델
 
-## 📌 한 줄 요약
+모든 자산은 단일 `Object` 모델로 통합 관리합니다.
 
-> Archi.Navi는 정적 문서가 아니라,\
+| 카테고리 | 집합체 (Compound) | 원자 단위 (Atomic) |
+|----------|-------------------|-------------------|
+| COMPUTE | `service` | `api_endpoint`, `function` |
+| STORAGE | `database`, `cache_instance` | `db_table`, `db_view`, `cache_key` |
+| CHANNEL | `message_broker` | `topic`, `queue` |
+
+관계는 원자 단위로 저장하고, Roll-up 뷰는 Materialized 계산으로 파생합니다.
+
+---
+
+## 구현 현황 (v1)
+
+| 항목 | 상태 |
+|------|------|
+| Architecture View (레이어드, Roll-up) | ✅ 완료 |
+| Object Mapping View (Roll-up + Roll-down) | ✅ 완료 |
+| Service List + CSV Export | ✅ 완료 |
+| Tag / Visibility 관리 | ✅ 완료 |
+| 승인 워크플로우 (일괄 승인/반려) | ✅ 완료 |
+| 멀티 워크스페이스 지원 | ✅ 완료 |
+| Rollup 엔진 (4단계: S2S, S2DB, S2Broker, D2D) | ✅ 완료 |
+| 쿼리 엔진 (BFS/DFS, 경로, 영향도, 사용 탐색) | ✅ 완료 |
+| 도메인 추론 Track A (Seed 기반) | ✅ 완료 |
+| 도메인 추론 Track B (Louvain Discovery) | ✅ 완료 |
+| AI Chat (스트리밍, 멀티 프로바이더) | ✅ 완료 |
+| DB 시그널 추출 (추론 정밀도 향상) | 🔜 v2 로드맵 |
+| AST 플러그인 (Tree-sitter) | 🔜 v2 로드맵 |
+| Evidence Assembler (AI Chat 연동) | 🔜 v2 로드맵 |
+
+---
+
+## 문서
+
+| 문서 | 설명 |
+|------|------|
+| [docs/00-overview.md](./docs/00-overview.md) | 제품 개요, 원칙, 범위 |
+| [docs/01-architecture.md](./docs/01-architecture.md) | 시스템 아키텍처, 기술 스택 |
+| [docs/02-data-model.md](./docs/02-data-model.md) | Object/Relation 모델, DB 스키마 |
+| [docs/03-inference-engine.md](./docs/03-inference-engine.md) | 추론 엔진 설계 |
+| [docs/04-query-engine.md](./docs/04-query-engine.md) | 쿼리 엔진 (BFS/DFS, 영향도 분석) |
+| [docs/05-rollup-and-graph.md](./docs/05-rollup-and-graph.md) | Rollup 전략 및 그래프 성능 |
+| [docs/06-development-guide.md](./docs/06-development-guide.md) | 개발 가이드 및 컨벤션 |
+| [docs/07-implementation-status.md](./docs/07-implementation-status.md) | v1 구현 현황 |
+| [docs/08-roadmap.md](./docs/08-roadmap.md) | v2+ 로드맵 |
+
+---
+
+> Archi.Navi는 정적 문서가 아닙니다.
 > **MSA 운영을 위한 실전 아키텍처 내비게이션 도구**입니다.

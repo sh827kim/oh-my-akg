@@ -2,235 +2,277 @@
 
 [한국어](README.ko.md)
 
-> A Living Architecture Map for MSA Teams\
+> A Local-first Architecture Navigation Tool for Distributed Service Environments
 > *Stop guessing your system. Start seeing it clearly.*
 
-------------------------------------------------------------------------
+---
 
-## 🚨 The Challenge
+## The Problem
 
-Operating microservices still raises difficult questions:
+Operating microservices raises difficult questions — repeatedly:
 
--   Which services depend on this one?
--   Why did a small change trigger failures elsewhere?
--   Is our architecture view still aligned with reality?
--   Can anyone explain the full flow across API, MQ, and DB?
+- Which services are affected by this change?
+- Why did a small fix trigger failures elsewhere?
+- Is our architecture diagram still aligned with reality?
+- Who owns this Kafka topic / DB table / API endpoint?
 
-Microservice systems evolve faster than static documents.
+MSA systems evolve faster than static documents.
 
-**Archi.Navi** addresses this gap by turning your repositories into a
-**live, explorable architecture map** with approval-based knowledge
-updates.
+**Archi.Navi** addresses this gap by turning your repositories into an
+**explorable architecture map** — with approval-based knowledge updates,
+Evidence-backed AI Chat, and a graph that reflects reality.
 
-------------------------------------------------------------------------
+---
 
-## 🧭 What Archi.Navi Provides
+## Core Concepts
 
-Archi.Navi analyzes repositories in your GitHub organization and
-delivers:
+| Term | Description |
+|------|-------------|
+| **Object** | The unified unit. Services, API endpoints, databases, tables, topics, queues — all represented as `Object` |
+| **Relation** | A typed connection between objects (`call`, `read`, `write`, `produce`, `consume`, `expose`, `depend_on`) |
+| **Roll-up View** | A summarized architecture perspective for fast impact analysis (service-to-service, domain-to-domain) |
+| **Roll-down View** | Drill-down into a specific object to see atomic-level detail flows |
+| **Approval Queue** | Inferred changes are queued first; applied only after approve/reject |
+| **Evidence** | Source context (file path, line, excerpt) backing every inferred relation or AI answer |
+| **Workspace** | Logical isolation boundary for multi-repo/multi-org expansion |
 
--   🔍 Searchable service overview with tags and visibility controls
--   🔗 Dependency graph for impact analysis
--   🏗 Architecture View (roll-up perspective)
--   🧩 Object Mapping View (drill-down/roll-down perspective)
--   ✅ Approval queue for inferred changes before applying
--   💬 Evidence-based AI Chat over your architecture knowledge
+---
 
-This is not a static documentation tool.\
-It is an operational visibility tool for real-world MSA environments.
-
-------------------------------------------------------------------------
-
-## 🧩 Core Concepts
-
-If you are new to Archi.Navi, these terms are the foundation:
-
--   **Object**
-    The unified unit in the model. Services, API endpoints, databases,
-    tables, topics, queues, and more are all represented as `Object`.
--   **Service**
-    A special `Object` type (`object_type=service`) used as the primary
-    operational boundary.
--   **Relation**
-    A typed connection between objects (`call`, `read`, `write`,
-    `produce`, `consume`, `expose`, `depend_on`).
--   **Roll-up View**
-    A summarized architecture perspective for fast impact analysis.
--   **Roll-down View**
-    A detailed drill-down perspective for selected objects and concrete
-    flows.
--   **Change Request (Approval Queue)**
-    Inferred changes are queued first and applied only after
-    approve/reject actions.
--   **Evidence**
-    Source context supporting inferred relations or AI answers.
--   **Visibility**
-    `VISIBLE` / `HIDDEN` control for inclusion in default views.
--   **Workspace**
-    Logical isolation boundary for future multi-org/repo operation.
-
-Understanding these concepts makes the product behavior much easier to
-predict and trust.
-
-------------------------------------------------------------------------
-
-## ✨ Key Features
+## Key Features
 
 ### 1. Service Overview
 
--   Service list with search
--   Alias / Type / Visibility management
--   Tag creation and editing
--   CSV export
+- Service list with search, tag, and visibility controls
+- Alias / Type / Visibility management
+- CSV export
 
-This provides a shared structural language across teams.
+### 2. Architecture View
 
-------------------------------------------------------------------------
+- Layered architecture visualization (Roll-up perspective)
+- Layer management with drag-and-drop
+- PNG export
 
-### 2. Dependency Graph
+### 3. Object Mapping View
 
--   Interactive service dependency visualization
--   Inbound / Outbound inspection
--   Search-based node highlighting
--   Hide support via visibility (`VISIBLE` / `HIDDEN`)
-
-This makes release impact analysis faster and more reliable.
-
-------------------------------------------------------------------------
-
-### 3. Architecture View + Object Mapping View
-
--   Architecture View for high-level roll-up structure
--   Object Mapping View for object-level drill-down
--   Dynamic edge-type filtering
--   PNG export support
-
-This keeps strategic and detailed perspectives in one workflow.
-
-------------------------------------------------------------------------
+- Interactive dependency graph (Roll-up & Roll-down)
+- Edge-type filtering (`call`, `read`, `write`, `produce`, `consume`)
+- View-level switching: Domain → Service → Atomic
 
 ### 4. Approval Workflow
 
--   Inferred dependency changes go to `change_requests`
--   Bulk approve/reject with selection support
--   Approved items are materialized into relations
-
-This protects trust in graph data while keeping automation useful.
-
-------------------------------------------------------------------------
+- All inferred relations go to a `PENDING` queue before being applied
+- Bulk approve / reject with Evidence review
+- Manual override always takes priority over inference
 
 ### 5. AI Chat (Evidence-first)
 
--   Architecture Q&A through local knowledge
--   Confidence + evidence driven responses
--   No final-answer style response without evidence
+- Architecture Q&A grounded in your actual graph data
+- Confidence + Evidence-driven responses
+- Supports OpenAI, Anthropic, Google (via Vercel AI SDK)
+- No definitive answers without Evidence
 
-------------------------------------------------------------------------
+---
 
-## ✅ Who Should Use This
+## Repository Structure
 
--   Teams actively operating MSA environments
--   Organizations managing multiple repositories
--   Backend / platform teams requiring impact analysis
--   Teams with costly onboarding due to structural complexity
--   Projects where docs easily drift from reality
-
-If your architecture must be explainable and operationally visible, this
-tool is designed for you.
-
-------------------------------------------------------------------------
-
-## 🏗 Repository Structure
-
-```text
-apps/
-  web/                 # Next.js UI
-packages/
-  core/                # object/relation model, roll-up
-  inference/           # inference pipeline + AST plugin skeletons
-  cli/                 # sync/status/approvals/up commands
-  config/              # shared config/github utilities
+```
+archi-navi/
+├── apps/
+│   └── web/                    # Next.js 16 App (UI + API Routes)
+│       ├── (dashboard)/        # Architecture View, Services, Approval, Chat
+│       └── api/                # REST API Routes
+│
+└── packages/
+    ├── core/                   # Query Engine (BFS/DFS), Rollup, Graph Index
+    ├── inference/              # Relation & Domain Inference Engine
+    ├── db/                     # Drizzle ORM schema + migrations
+    ├── cli/                    # CLI tool (scan, infer, rebuild-rollup, export, snapshot)
+    ├── shared/                 # Shared types, constants, utilities
+    └── ui/                     # Shared shadcn/ui components
 ```
 
-------------------------------------------------------------------------
+---
 
-## 🛠 Tech Stack
+## Tech Stack
 
--   Next.js (App Router)
--   React + TypeScript
--   Cytoscape.js (graph visualization)
--   PGlite (local Postgres-compatible DB)
--   Radix UI
--   Sonner
+| Layer | Technology |
+|-------|------------|
+| Frontend | Next.js 16 (App Router) + React 19 + TypeScript |
+| UI Library | TailwindCSS 4 + shadcn/ui |
+| Graph Visualization | Cytoscape.js + React Flow |
+| State Management | Zustand |
+| Database | PGlite (local) / PostgreSQL 17 (team deploy) |
+| ORM | Drizzle ORM |
+| AI / LLM | Vercel AI SDK (OpenAI, Anthropic, Google) |
+| Monorepo | Turborepo + pnpm |
+| CLI | Commander.js + tsx |
+| Testing | Vitest + Playwright |
 
-------------------------------------------------------------------------
+---
 
-## 🚀 Getting Started
+## Getting Started
 
-### 1. Install dependencies
+### Prerequisites
+
+- Node.js 22.x LTS
+- pnpm 10.x
+
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/your-org/archi-navi.git
+cd archi-navi
+
+# Install dependencies
 pnpm install
+
+# Copy environment variables
+cp .env.example .env.local
+# Edit .env.local — set AI_API_KEY at minimum
 ```
 
-### 2. Run web in development
+### Environment Variables
+
+```env
+# DB — PGlite is used by default (no separate install needed)
+# Uncomment below to use PostgreSQL instead
+# DATABASE_URL=postgresql://postgres:password@localhost:5432/archinavi
+
+# PGlite data directory (default: .archi-navi/data)
+PGLITE_DATA_DIR=.archi-navi/data
+
+# AI provider: openai | anthropic | google
+AI_PROVIDER=openai
+AI_API_KEY=sk-your-api-key
+AI_MODEL=gpt-4o
+
+# App
+NODE_ENV=development
+PORT=3000
+```
+
+### Run Development Server
 
 ```bash
 pnpm dev
 ```
 
-Open your browser at:
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-    http://localhost:3000
+---
 
-------------------------------------------------------------------------
-
-## 🧑‍💻 CLI Usage
+## Available Scripts
 
 ```bash
-pnpm cli sync <org>
-pnpm cli status
-pnpm cli approvals list
-pnpm cli approvals apply --all --dry-run
-pnpm cli up
+pnpm dev            # Start development server (Next.js + HMR)
+pnpm build          # Production build
+pnpm test           # Run all tests
+pnpm lint           # ESLint
+pnpm format         # Prettier formatting
+pnpm db:generate    # Generate Drizzle migrations from schema
+pnpm db:migrate     # Apply migrations
+pnpm db:studio      # Open Drizzle Studio (DB browser)
 ```
 
-You can also run the packaged entrypoint:
+---
+
+## CLI Usage
+
+The CLI is used to scan source code, run inference, and manage data.
 
 ```bash
-npx archi-navi up
+# Scan source code and configuration files
+archi-navi scan --path /path/to/project --mode code
+
+# Run relation/domain inference
+archi-navi infer --workspace <workspaceId>
+
+# Rebuild rollup graph
+archi-navi rebuild-rollup --workspace <workspaceId>
+
+# Export data
+archi-navi export --format json --output ./export.json
+
+# Save a snapshot of the current state
+archi-navi snapshot
 ```
 
-Example `.env`:
+Scan modes: `code` | `db` | `config` | `all`
 
-```env
-GITHUB_TOKEN=your_token
-GITHUB_ORG=your_org
-OPENAI_API_KEY=your_openai_key
-ARCHI_NAVI_DB_PATH=data/akg-db
-```
+---
 
-------------------------------------------------------------------------
+## Inference Engine
 
-## 🗄 Data & Schema
+Archi.Navi automatically infers relations from your codebase:
 
--   Default DB path: `data/akg-db`
--   Env override: `ARCHI_NAVI_DB_PATH` (or `AKG_DB_PATH`)
--   Schema definition: `scripts/schema.sql`
+| Signal Source | Inferred Relation | Example |
+|---------------|------------------|---------|
+| HTTP client call | `call` | `RestTemplate.getForObject(...)` |
+| API controller | `expose` | `@GetMapping("/api/orders")` |
+| Message producer | `produce` | `kafkaTemplate.send("order.created")` |
+| Message consumer | `consume` | `@KafkaListener(topics="order.created")` |
+| DB SELECT | `read` | JPA Repository, MyBatis XML |
+| DB INSERT/UPDATE | `write` | JPA Repository, MyBatis XML |
 
-------------------------------------------------------------------------
+Domain inference supports two tracks:
+- **Track A**: Seed-based — user defines domain names, engine calculates affinity scores
+- **Track B**: Seed-less Discovery — Louvain community detection on the relation graph
 
-## 📚 Product Documents
+All inference results go through the **Approval Queue** before being applied.
 
--   PRD: `docs/prd/PRD.md`
--   Spec: `docs/spec/object-model-definition.md`
--   Implementation Spec: `docs/spec/2026-02-20_implementation-spec-core-api.md`
--   Master Roadmap: `docs/tasks/2026-02-20_master-roadmap-and-task-breakdown.md`
+---
 
-------------------------------------------------------------------------
+## Data Model
 
-## 📌 Summary
+All assets are unified under a single `Object` model:
 
-> Archi.Navi is not static documentation.\
-> It is a **practical architecture navigation tool for operating
-> microservice systems**.
+| Category | Compound | Atomic |
+|----------|----------|--------|
+| COMPUTE | `service` | `api_endpoint`, `function` |
+| STORAGE | `database`, `cache_instance` | `db_table`, `db_view`, `cache_key` |
+| CHANNEL | `message_broker` | `topic`, `queue` |
+
+Relations are stored at the atomic level; Roll-up views are derived via materialized computation.
+
+---
+
+## Implementation Status (v1)
+
+| Area | Status |
+|------|--------|
+| Architecture View (layered, roll-up) | ✅ Complete |
+| Object Mapping View (roll-up + roll-down) | ✅ Complete |
+| Service List + CSV Export | ✅ Complete |
+| Tag / Visibility management | ✅ Complete |
+| Approval Workflow (bulk approve/reject) | ✅ Complete |
+| Multi-workspace support | ✅ Complete |
+| Rollup Engine (4 levels: S2S, S2DB, S2Broker, D2D) | ✅ Complete |
+| Query Engine (BFS/DFS, path, impact, usage) | ✅ Complete |
+| Domain Inference Track A (Seed-based) | ✅ Complete |
+| Domain Inference Track B (Louvain Discovery) | ✅ Complete |
+| AI Chat (streaming, multi-provider) | ✅ Complete |
+| DB Signal extraction for inference | 🔜 v2 roadmap |
+| AST Plugin (Tree-sitter) | 🔜 v2 roadmap |
+| Evidence Assembler for AI Chat | 🔜 v2 roadmap |
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/00-overview.md](./docs/00-overview.md) | Product overview, principles, scope |
+| [docs/01-architecture.md](./docs/01-architecture.md) | System architecture, tech stack |
+| [docs/02-data-model.md](./docs/02-data-model.md) | Object/Relation model, DB schema |
+| [docs/03-inference-engine.md](./docs/03-inference-engine.md) | Inference engine design |
+| [docs/04-query-engine.md](./docs/04-query-engine.md) | Query engine (BFS/DFS, impact analysis) |
+| [docs/05-rollup-and-graph.md](./docs/05-rollup-and-graph.md) | Rollup strategy and graph performance |
+| [docs/06-development-guide.md](./docs/06-development-guide.md) | Development guide and conventions |
+| [docs/07-implementation-status.md](./docs/07-implementation-status.md) | v1 implementation status |
+| [docs/08-roadmap.md](./docs/08-roadmap.md) | v2+ roadmap |
+
+---
+
+> Archi.Navi is not static documentation.
+> It is a **practical architecture navigation tool for operating microservice systems**.
