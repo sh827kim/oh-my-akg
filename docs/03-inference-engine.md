@@ -1,71 +1,190 @@
 # Archi.Navi — 추론 엔진
 
 작성일: 2026-02-22
-문서 버전: v2.0
+문서 버전: v3.0
 
 ---
 
 ## 1. 설계 목적
 
-추론 엔진은 소스코드, DB 스키마, 메시지 설정 등에서 **구조 신호(Signal)**를 추출하고,
+추론 엔진은 소스코드, DB 스키마, 설정 파일, 메시지 설정 등에서 **구조 신호(Signal)**를 추출하고,
 이를 기반으로 **Relation 후보**와 **Domain 소속**을 자동으로 생성한다.
 
+**목표: 전체 Relation의 70% 이상을 자동 추론하여 수동 등록 부담을 최소화한다.**
+
 모든 추론 결과는 **승인 전 반영 금지** 원칙을 따른다.
+
+### 1.1 추론 엔진 전체 아키텍처
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Signal Collectors                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────┐  │
+│  │ Code     │  │ Config   │  │ DB Schema│  │ Message│  │
+│  │ Signals  │  │ Signals  │  │ Signals  │  │ Signals│  │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └───┬────┘  │
+│       │              │              │             │      │
+│       ▼              ▼              ▼             ▼      │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │          Signal Store (evidences 테이블)          │   │
+│  └─────────────────────┬────────────────────────────┘   │
+│                        │                                │
+│       ┌────────────────┼────────────────┐               │
+│       ▼                ▼                ▼               │
+│  ┌─────────┐   ┌──────────────┐  ┌──────────────┐      │
+│  │Relation │   │Domain Track A│  │Domain Track B│      │
+│  │Inference│   │(Seed-based)  │  │(Discovery)   │      │
+│  └────┬────┘   └──────┬───────┘  └──────┬───────┘      │
+│       │               │                 │               │
+│       ▼               ▼                 ▼               │
+│  relation_     domain_          domain_discovery_       │
+│  candidates    candidates       memberships             │
+│  (PENDING)     (PENDING)        (스냅샷)                │
+│       │               │                 │               │
+│       └───────────────┼─────────────────┘               │
+│                       ▼                                 │
+│              승인 워크플로우 (UI)                        │
+│                       │                                 │
+│       ┌───────────────┼───────────────┐                 │
+│       ▼               ▼               ▼                 │
+│  object_       object_domain_   Named Domain            │
+│  relations     affinities       승격                    │
+│  (확정)        (확정)           (선택)                   │
+└─────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## 2. Relation 추론
 
-### 2.1 추론 파이프라인
+### 2.1 추론 파이프라인 — 전체 흐름
 
 ```
-소스코드/설정 스캔
+CLI: archi-navi scan --mode <mode>
       ↓
-신호(Signal) 추출
+Signal Collector 실행 (소스별)
       ↓
-Relation 후보 생성
+evidences 테이블에 근거 저장
       ↓
-relation_candidates (PENDING)
+code_call_edges / code_import_edges에 구조 데이터 저장
       ↓
-사용자 승인/반려
+CLI: archi-navi infer --track relations
       ↓
-object_relations (확정) + evidence 연결
+Relation Inference Engine 실행
+  - Signal Store 조회
+  - 추론 규칙 적용
+  - Confidence 산정
+      ↓
+relation_candidates (PENDING) + evidence 연결
+      ↓
+UI: 승인 페이지에서 검토
+      ↓
+승인 → object_relations (확정) + rollup rebuild 트리거
+반려 → status='REJECTED'
 ```
 
-### 2.2 신호 소스별 추론 규칙
+### 2.2 Signal Collector — 수집 단계
 
-#### Code 기반 추론
+Signal Collector는 **원본 데이터를 분석하여 구조화된 신호로 변환**하는 모듈이다.
+각 Collector는 독립적으로 실행 가능하며, 결과를 공유 테이블에 저장한다.
 
-| 신호 | 추론 결과 | 예시 |
-|------|----------|------|
-| HTTP Client 호출 | `call` relation | `RestTemplate.getForObject("/api/orders")` |
-| API Controller 선언 | `expose` relation | `@GetMapping("/api/orders")` |
-| Message Producer | `produce` relation | `kafkaTemplate.send("order.created")` |
-| Message Consumer | `consume` relation | `@KafkaListener(topics="order.created")` |
+#### 수집 모드별 CLI 호출
 
-#### DB 기반 추론
+```bash
+# 코드 신호 수집 (Phase 1: Regex / Phase 2: AST)
+archi-navi scan --mode code-signals --workspace <id> --repo-root <path>
 
-| 신호 | 추론 결과 | 예시 |
-|------|----------|------|
-| SELECT 쿼리 | `read` relation | MyBatis XML, JPA Repository |
-| INSERT/UPDATE/DELETE | `write` relation | MyBatis XML, JPA Repository |
-| FK 제약조건 | 테이블 간 참조 관계 | `orders.customer_id → customers.id` |
+# 설정 파일 신호 수집
+archi-navi scan --mode config-signals --workspace <id> --repo-root <path>
 
-#### 설정 기반 추론
+# DB 스키마 신호 수집
+archi-navi scan --mode db-signals --workspace <id> --connection <dsn>
+```
 
-| 신호 | 추론 결과 | 예시 |
-|------|----------|------|
-| application.yml DB 설정 | Object 생성 (database) | `spring.datasource.url` |
-| Kafka 설정 | Object 생성 (broker/topic) | `spring.kafka.bootstrap-servers` |
-| API Gateway 라우팅 | `call` 관계 | 라우팅 설정에서 서비스 매핑 |
+#### 수집 결과 저장 위치
 
-### 2.3 Confidence 산정 기준
+| Collector | 저장 테이블 | 설명 |
+|-----------|------------|------|
+| Code Signal | `code_artifacts` | 파일/모듈 메타 (언어, 경로, SHA256) |
+| Code Signal | `code_call_edges` | 호출 관계 (caller → callee symbol) |
+| Code Signal | `code_import_edges` | Import 그래프 |
+| Code Signal | `evidences` | 근거 원본 (파일 경로, 행 번호, 발췌) |
+| Config Signal | `evidences` | 설정 파일 근거 |
+| Config Signal | `objects` (생성) | 발견된 DB/Broker/Topic Object 자동 생성 |
+| DB Signal | `evidences` | FK 제약조건, 테이블 스키마 근거 |
+
+### 2.3 Relation 추론 규칙
+
+#### 2.3.1 Code 기반 추론
+
+| 신호 패턴 | 추론 결과 | Confidence | 비고 |
+|-----------|----------|------------|------|
+| HTTP Client 호출 (`RestTemplate`, `WebClient`, `FeignClient`) | `call` relation | Phase 1: 0.7 / Phase 2: 0.9 | URL path → api_endpoint 매칭 필요 |
+| API Controller 선언 (`@GetMapping`, `@PostMapping`) | `expose` relation | Phase 1: 0.8 / Phase 2: 0.95 | path → api_endpoint Object 자동 생성 |
+| Message Producer (`kafkaTemplate.send`, `@SendTo`) | `produce` relation | Phase 1: 0.7 / Phase 2: 0.9 | topic 문자열 추출 |
+| Message Consumer (`@KafkaListener`, `@RabbitListener`) | `consume` relation | Phase 1: 0.8 / Phase 2: 0.95 | topics 파라미터 추출 |
+| MyBatis XML (`<select>`, `<insert>`, `<update>`, `<delete>`) | `read`/`write` | Phase 1: 0.8 | SQL 내 테이블명 추출 |
+| JPA Mapping (`@Entity`, `@Table`, `@ManyToOne`) | `read`/`write` | Phase 1: 0.7 / Phase 2: 0.9 | 엔티티-테이블 매핑 |
+
+#### 2.3.2 URL Path → API Endpoint 매칭 알고리즘
+
+Code에서 HTTP 호출을 감지하면 URL path를 추출하는데, 이를 **어떤 서비스의 어떤 API에 매핑**할지가 핵심이다.
+
+```
+[매칭 우선순위]
+1. 정확 매칭: url_path == api_endpoint.name (또는 metadata.path)
+   → confidence += 0.3
+
+2. 프리픽스 매칭: url_path.startsWith(service.metadata.contextPath)
+   → 해당 서비스의 api_endpoint 중 가장 유사한 것 선택
+   → confidence += 0.2
+
+3. 서비스명 힌트: FeignClient의 name/url 속성 → 서비스 매칭
+   → confidence += 0.2
+
+4. 매칭 실패 시: subject_service → "unknown" endpoint로 기록
+   → confidence = 0.3, status=PENDING으로 사용자 검토 유도
+```
+
+#### 2.3.3 Config 기반 추론
+
+| 설정 파일 | 파싱 대상 | 추론 결과 | Confidence |
+|-----------|----------|----------|------------|
+| `application.yml` | `spring.datasource.url` | database Object 생성 + `read`/`write` relation | 0.9 |
+| `application.yml` | `spring.kafka.bootstrap-servers` | message_broker Object 생성 | 0.9 |
+| `application.yml` | `spring.kafka.consumer.group-id` + topics | `consume` relation | 0.85 |
+| `docker-compose.yml` | `depends_on` | service간 `depend_on` relation | 0.6 |
+| `docker-compose.yml` | DB 서비스 (mysql, postgres 이미지) | database Object 생성 | 0.8 |
+| K8s `deployment.yml` | 환경변수의 DB_URL, KAFKA_BROKERS | Object 생성 + relation | 0.7 |
+| API Gateway config | 라우팅 규칙 (path → service) | `call` relation | 0.8 |
+
+#### 2.3.4 DB 스키마 기반 추론
+
+| 신호 | 추론 결과 | Confidence |
+|------|----------|------------|
+| FK 제약조건 | `db_table` → `db_table` 참조 관계 (Evidence로 저장) | 0.95 |
+| SELECT 쿼리 (MyBatis/JPA) | service → db_table `read` | 0.8 |
+| INSERT/UPDATE/DELETE 쿼리 | service → db_table `write` | 0.8 |
+| 컬럼 참조 패턴 (`*_id` suffix) | db_table 간 implicit FK | 0.5 |
+
+### 2.4 Confidence 산정 기준
 
 | 수준 | confidence | 조건 |
 |------|-----------|------|
 | 높음 | 0.9~1.0 | AST 기반 정확한 추출 + Evidence 명확 |
-| 중간 | 0.6~0.8 | 패턴 매칭 기반 (정규식, 파일명) |
+| 중간 | 0.6~0.8 | Regex 패턴 매칭 기반 (Phase 1) |
 | 낮음 | 0.3~0.5 | 휴리스틱 기반 (이름 유사도, 디렉토리 구조) |
+
+Phase 2(AST) 적용 시 같은 신호라도 confidence가 0.1~0.2 상향된다.
+
+### 2.5 중복 후보 처리
+
+같은 `(subject, object, relationType)` 조합의 후보가 이미 존재할 때:
+
+- **기존 PENDING**: 새 confidence가 더 높으면 갱신, evidence 추가
+- **기존 APPROVED**: 무시 (이미 확정됨)
+- **기존 REJECTED**: 새 evidence가 있으면 별도 후보 생성, 없으면 무시
+- **수동 MANUAL 관계 존재**: 무시 (수동 오버라이드 우선)
 
 ---
 
@@ -102,12 +221,14 @@ purity    = max(affinity)        // 단일 도메인 순수도
 - 파일 경로, 패키지명, 클래스/함수명에서 도메인 키워드 매칭
 - 점수 상한: domain당 최대 0.30 (오탐 방지)
 
-**(B) AST 기반 (강한 신호)**
-- Import graph: 어떤 도메인 모듈을 참조하는지
-- Symbol ownership: 심볼이 어느 도메인에 정의되었는지
-- Call edges (선택): 실제 호출 관계
+**(B) Code Structure 기반 (중간 신호)** — Phase 1
+- `code_import_edges`: 어떤 도메인 모듈을 참조하는지 (import 빈도 집계)
+- `code_call_edges`: 어떤 도메인 소유 Object를 호출하는지 (call 빈도 집계)
 
-**1차 AST 플러그인 지원 언어**: Java/Kotlin, TypeScript/JavaScript, Python
+**(C) AST 기반 (강한 신호)** — Phase 2
+- Import graph: 정확한 모듈 의존 관계
+- Symbol ownership: 심볼이 어느 도메인에 정의되었는지
+- Call edges: 실제 호출 관계의 정밀 분석
 
 #### DB Signals (강한 신호)
 
@@ -180,15 +301,16 @@ object_domain_affinities (확정)
 
 #### 엣지 가중치
 
-| 타입 | 기본 가중치 | 설명 |
-|------|------------|------|
-| service→service call (rollup) | 1.0 | 가장 강한 구조 결합 |
-| service→table read/write | 0.8 | DB 접근 |
-| service→topic produce/consume | 0.6 | 메시지 기반 결합 |
-| table↔table FK | 0.4 | 스키마 레벨 참조 |
-| code import/call | 0.7 | 코드 레벨 참조 |
+| 타입 | 기본 가중치 | 프로필 키 | 설명 |
+|------|------------|----------|------|
+| service→service call (rollup) | 1.0 | `edge_w_call` | 가장 강한 구조 결합 |
+| service→table read/write | 0.8 | `edge_w_rw` | DB 접근 |
+| service→topic produce/consume | 0.6 | `edge_w_msg` | 메시지 기반 결합 |
+| table↔table FK | 0.4 | `edge_w_fk` | 스키마 레벨 참조 |
+| code import/call | 0.7 | `edge_w_code` | 코드 레벨 참조 |
 
 가중치는 `domain_inference_profiles`에서 워크스페이스별 조정 가능.
+`enabled_layers` 필드로 사용할 레이어를 선택 가능 (기본: `["call","db","msg","code"]`).
 
 ### 4.3 커뮤니티 탐지 알고리즘
 
@@ -234,10 +356,18 @@ const communities = louvain(graph, {
 
 클러스터 내부에서 자주 등장하는 키워드로 라벨 후보를 생성한다.
 
-- 서비스 이름 토큰 빈도
-- 테이블 prefix 빈도
-- Topic prefix 빈도
+**토큰 추출 소스:**
+- 서비스 이름 토큰 빈도 (예: `order-service` → `order`)
+- 테이블 prefix 빈도 (예: `order_items`, `order_payments` → `order`)
+- Topic prefix 빈도 (예: `order.created`, `order.cancelled` → `order`)
 - 패키지 top-level 토큰
+
+**라벨 점수 산정:**
+```
+label_score = Σ (token 출현 빈도 / 클러스터 내 총 토큰 수)
+```
+
+상위 3개 후보를 `metadata.label_candidates`에 저장하여 사용자가 이름을 선택/수정할 수 있게 한다.
 
 ### 4.6 Discovery Affinity
 
@@ -268,43 +398,127 @@ domain_discovery_memberships (클러스터별 멤버십 저장)
 
 ---
 
-## 5. DB 추론 강화
+## 5. DB 스키마 신호 추출
 
-### 5.1 기본 추론 소스
+### 5.1 Domain 추론용 신호 (Track A dbScore)
 
-| 소스 | 추론 방식 |
-|------|----------|
-| **FK 제약조건** | 테이블 간 참조 관계 직접 추출 |
-| **컬럼명 유사도** | `*_id`, `*_no` 등 접미사 패턴 매칭 |
-| **식별자 접미사** | `*_id`, `*_no`, `*_uid`, `*_key`, `*_code`, `*id`, `*no`, `*uid` |
-| **제외 패턴** | `created_by`, `updated_by`, `deleted_by`, `created_at`, `updated_at` |
+| 소스 | 추론 방식 | Confidence |
+|------|----------|------------|
+| **테이블 prefix** | `order_*` 테이블 → order 도메인 | 0.6 |
+| **FK 커뮤니티** | FK로 연결된 테이블 그룹 → 같은 도메인 | 0.7 |
+| **FK 네이밍 패턴** | FK가 가리키는 테이블의 도메인 → 참조 관계 | 0.5 |
 
-### 5.2 확장 추론 소스 (v1+)
+### 5.2 Relation 추론용 신호
 
-| 소스 | 추론 방식 |
-|------|----------|
-| **인덱스 패턴** | 복합 인덱스에 포함된 컬럼 → 조인 관계 힌트 |
-| **Unique 제약조건** | 유니크 키 패턴 → 엔티티 식별 관계 |
-| **MyBatis XML** | SQL 매퍼에서 테이블 접근 직접 추출 |
-| **JPA Mapping** | `@Entity`, `@ManyToOne` 등에서 관계 추출 |
+| 소스 | 추론 방식 | 추론 결과 | Confidence |
+|------|----------|----------|------------|
+| **FK 제약조건** | 직접 추출 | `db_table` → `db_table` 참조 Evidence | 0.95 |
+| **컬럼명 패턴** | `*_id`, `*_no` 접미사 → 대상 테이블 추정 | implicit FK Evidence | 0.5 |
+
+**제외 패턴** (false positive 방지):
+`created_by`, `updated_by`, `deleted_by`, `created_at`, `updated_at`
+
+> **참고**: MyBatis XML 파싱, JPA Mapping 파싱은 Section 6(Code Signal Extraction)에서 처리한다.
+> DB 스키마 신호 추출은 **코드 없이 스키마만으로 추출 가능한 신호**에 집중한다.
 
 ---
 
-## 6. AST 플러그인 설계
+## 6. Code Signal Extraction — 2단계 전략
 
-### 6.1 아키텍처
+### 6.1 Phase 1: Regex 기반 패턴 매칭 (우선 구현)
+
+AST 없이도 **정규식 기반 패턴 매칭으로 70~80% 정확도**를 달성할 수 있다.
+Phase 1은 빠르게 구현하여 추론 파이프라인 전체를 동작시키는 데 집중한다.
+
+#### 6.1.1 추출 대상 패턴 (Java/Kotlin)
+
+| 카테고리 | 패턴 | 추출 정보 |
+|---------|------|----------|
+| **API 노출** | `@(Get\|Post\|Put\|Delete\|Patch)Mapping\("(.+)"\)` | `expose` + path |
+| **API 노출** | `@RequestMapping\("(.+)"\)` | `expose` + path (method는 별도 추출) |
+| **HTTP 호출** | `restTemplate\.\w+\("([^"]+)"` | `call` + URL |
+| **HTTP 호출** | `webClient\.\w+\(\)\.uri\("([^"]+)"` | `call` + URL |
+| **HTTP 호출** | `@FeignClient\(.*name\s*=\s*"([^"]+)"` | `call` + 대상 서비스 name |
+| **Kafka 발행** | `kafkaTemplate\.send\("([^"]+)"` | `produce` + topic |
+| **Kafka 수신** | `@KafkaListener\(.*topics\s*=\s*\{?"([^"]+)"` | `consume` + topic |
+| **DB 접근 (MyBatis)** | `<select\|insert\|update\|delete[^>]*>` 내 테이블명 | `read`/`write` + table |
+| **DB 접근 (JPA)** | `@Table\(.*name\s*=\s*"([^"]+)"` | 엔티티-테이블 매핑 |
+| **DB 접근 (JPA)** | `@(ManyToOne\|OneToMany\|ManyToMany)` | 테이블 간 관계 힌트 |
+
+#### 6.1.2 추출 대상 패턴 (TypeScript/JavaScript)
+
+| 카테고리 | 패턴 | 추출 정보 |
+|---------|------|----------|
+| **HTTP 호출** | `(fetch\|axios\.\w+)\(["']([^"']+)["']` | `call` + URL |
+| **HTTP 호출** | `\.get\|\.post\|\.put\|\.delete\(["']([^"']+)["']` | `call` + URL |
+| **API 노출** | `(app\|router)\.(get\|post\|put\|delete)\(["']([^"']+)["']` | `expose` + path |
+
+#### 6.1.3 추출 대상 패턴 (Python)
+
+| 카테고리 | 패턴 | 추출 정보 |
+|---------|------|----------|
+| **HTTP 호출** | `requests\.\w+\(["']([^"']+)["']` | `call` + URL |
+| **API 노출** | `@(app\|router)\.(get\|post\|put\|delete)\(["']([^"']+)["']` | `expose` + path |
+| **Kafka** | `KafkaProducer.*\.send\(["']([^"']+)["']` | `produce` + topic |
+| **Kafka** | `@kafka_consumer\(.*topic=["']([^"']+)["']` | `consume` + topic |
+
+#### 6.1.4 수집 흐름
+
+```
+archi-navi scan --mode code-signals --repo-root <path>
+      ↓
+1. 파일 탐색 (언어별 확장자 필터: .java, .kt, .ts, .js, .py)
+      ↓
+2. SHA256 해시 비교 → 변경된 파일만 처리 (증분 스캔)
+      ↓
+3. 파일별 정규식 매칭 → 신호 추출
+      ↓
+4. code_artifacts 저장 (파일 메타)
+   code_call_edges 저장 (호출 관계)
+   code_import_edges 저장 (Import 관계)
+   evidences 저장 (근거: 파일 경로, 행 번호, 코드 발췌)
+      ↓
+5. 추출 완료 리포트 출력
+   - 스캔 파일 수, 신규/변경/미변경 파일 수
+   - 추출된 신호 유형별 개수
+```
+
+#### 6.1.5 Phase 1 한계
+
+- **변수/상수로 지정된 URL**: `String url = "/api/orders"; restTemplate.get(url)` → 미감지
+- **동적 URL**: `restTemplate.get("/api/" + serviceName + "/orders")` → 미감지
+- **간접 호출**: 팩토리 패턴, 의존성 주입으로 분리된 호출 → 미감지
+- **정확도**: 약 70~80% (Phase 2에서 90%+로 개선)
+
+### 6.2 Phase 2: AST 기반 정밀 추출 (Next Step)
+
+Phase 1의 한계를 보완하기 위해 **Tree-sitter 기반 AST 분석**을 도입한다.
+Phase 1과 **동일한 출력 형식** (`code_artifacts`, `code_call_edges`, `code_import_edges`, `evidences`)을 사용하므로,
+하위 추론 엔진은 수정 없이 정밀도만 향상된다.
+
+#### 6.2.1 아키텍처
 
 ```
 소스코드 파일
       ↓
 Tree-sitter 파서 (언어별 문법)
       ↓
-AST → 구조적 추출
+AST → 구조적 쿼리 (S-expression)
       ↓
-code_artifacts + code_import_edges + code_call_edges
+code_artifacts + code_import_edges + code_call_edges + evidences
 ```
 
-### 6.2 추출 산출물
+#### 6.2.2 AST가 해결하는 Phase 1 한계
+
+| Phase 1 한계 | AST 해결 방식 |
+|-------------|-------------|
+| 변수/상수 URL | AST data-flow 분석으로 변수 추적 |
+| 간접 호출 | 타입 추론 → 인터페이스 구현체 매핑 |
+| 중첩 어노테이션 | AST 구조적 쿼리로 정확한 파라미터 추출 |
+| 멀티라인 패턴 | AST는 문법 구조 기반이므로 줄바꿈 무관 |
+| Confidence 향상 | 같은 패턴도 AST 검증 시 +0.1~0.2 |
+
+#### 6.2.3 추출 산출물
 
 | 산출물 | 테이블 | 설명 |
 |--------|--------|------|
@@ -312,7 +526,7 @@ code_artifacts + code_import_edges + code_call_edges
 | Import 관계 | `code_import_edges` | 어떤 모듈/패키지를 참조하는지 |
 | Call 관계 | `code_call_edges` | 어떤 심볼을 호출하는지 |
 
-### 6.3 지원 언어 (v1)
+#### 6.2.4 지원 언어
 
 | 언어 | Tree-sitter 문법 | 주요 추출 대상 |
 |------|-----------------|---------------|
@@ -320,17 +534,124 @@ code_artifacts + code_import_edges + code_call_edges
 | **TypeScript/JS** | tree-sitter-typescript | import/require, decorator, function call |
 | **Python** | tree-sitter-python | import, decorator, function call |
 
-### 6.4 설계 원칙
+#### 6.2.5 설계 원칙
 
 - AST는 "규범 검증"이 아니라 **정확한 관측치 추출 도구**
-- 언어별 플러그인은 선택적 (AST 없어도 휴리스틱으로 동작)
+- 언어별 플러그인은 선택적 (Phase 1 Regex가 없어도 AST만으로 동작)
 - 파일 해시(`sha256`)로 변경 감지 → 변경된 파일만 재분석
+- Phase 1과 Phase 2는 **동일 출력 형식**을 공유 → 전환 비용 최소화
 
 ---
 
-## 7. 승인 워크플로우 통합
+## 7. Config 파싱 전략
 
-### 7.1 Relation 승인
+### 7.1 지원 설정 파일 목록
+
+| 파일 | 파싱 라이브러리 | 추출 대상 |
+|------|---------------|----------|
+| `application.yml` / `application.properties` | `js-yaml` | DB URL, Kafka 설정, 서비스 포트, context-path |
+| `bootstrap.yml` | `js-yaml` | 서비스 이름, Config Server 주소 |
+| `docker-compose.yml` | `js-yaml` | 서비스 의존관계, DB/Broker 컨테이너, 포트 매핑 |
+| K8s `deployment.yml` / `service.yml` | `js-yaml` | 환경변수 (DB_URL, KAFKA_BROKERS), 서비스 디스커버리 |
+| `.env` | 텍스트 파싱 | 환경변수 → DB URL, API URL 추출 |
+
+### 7.2 application.yml 파싱 규칙
+
+```yaml
+# 입력 예시
+spring:
+  application:
+    name: order-service        # → service Object 이름 확인/매칭
+  datasource:
+    url: jdbc:mysql://db-host:3306/order_db  # → database Object 생성
+  kafka:
+    bootstrap-servers: kafka:9092             # → message_broker Object 생성
+    consumer:
+      group-id: order-group
+    listener:
+      topics: order.created, payment.completed  # → topic Object 생성 + consume relation
+```
+
+**추론 규칙:**
+
+| YAML 경로 | 추출 | 추론 |
+|-----------|------|------|
+| `spring.application.name` | 서비스명 | 기존 service Object와 매칭 |
+| `spring.datasource.url` | DB URL → host, port, dbName | database Object 생성 + service→database `read`/`write` |
+| `spring.jpa.properties` 존재 | JPA 사용 확인 | `read`/`write` confidence 보정 |
+| `spring.kafka.bootstrap-servers` | Broker 주소 | message_broker Object 생성 |
+| `spring.kafka.consumer.group-id` + topics | Consumer 설정 | service→topic `consume` |
+| `spring.kafka.producer.*` | Producer 설정 | service→broker `produce` (topic은 코드에서 추출) |
+| `server.port` | 서비스 포트 | service metadata 보강 |
+| `server.servlet.context-path` | Context path | URL 매칭 시 prefix로 활용 |
+
+### 7.3 docker-compose.yml 파싱 규칙
+
+```yaml
+# 입력 예시
+services:
+  order-service:
+    depends_on:
+      - mysql-db
+      - kafka
+  mysql-db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: order_db
+  kafka:
+    image: confluentinc/cp-kafka:7.0
+```
+
+**추론 규칙:**
+
+| 항목 | 추론 |
+|------|------|
+| `depends_on` | service → service `depend_on` (confidence: 0.6) |
+| DB 이미지 (`mysql`, `postgres`, `mariadb`) | database Object 생성 |
+| Kafka/RabbitMQ 이미지 | message_broker Object 생성 |
+| `MYSQL_DATABASE` 환경변수 | database 이름 매칭 |
+| 서비스명이 기존 Object와 매칭 | 기존 service Object에 metadata 보강 |
+
+### 7.4 수집 흐름
+
+```
+archi-navi scan --mode config-signals --repo-root <path>
+      ↓
+1. 설정 파일 탐색
+   - **/application*.yml, **/application*.properties
+   - **/bootstrap*.yml
+   - **/docker-compose*.yml
+   - **/k8s/**/*.yml, **/deployment*.yml
+   - **/.env
+      ↓
+2. 파일별 파싱 + 규칙 적용
+      ↓
+3. Object 자동 생성 (database, message_broker, topic)
+   - 이미 존재하면 metadata 보강
+   - 새로 발견되면 PENDING 상태로 생성 가능 (설정에 따라)
+      ↓
+4. relation_candidates 생성 + evidences 연결
+      ↓
+5. 리포트 출력
+   - 발견된 설정 파일 수
+   - 생성/보강된 Object 수
+   - 생성된 relation candidate 수
+```
+
+---
+
+## 8. 승인 워크플로우 통합
+
+### 8.1 Relation 승인
+
+#### API 경로
+
+| Method | Path | 설명 |
+|--------|------|------|
+| `GET` | `/api/inference/candidates?workspaceId=&status=PENDING` | 후보 목록 조회 |
+| `PATCH` | `/api/inference/candidates/:id` | 승인/거부 (body: `{ status }`) |
+
+#### 승인 흐름
 
 ```
 relation_candidates (PENDING)
@@ -338,28 +659,39 @@ relation_candidates (PENDING)
 승인 UI:
   - 전체 선택
   - 부분 선택 해제
-  - Evidence 링크 확인
+  - Evidence 링크 확인 (파일명, 행 번호, 코드 발췌)
   - 일괄 승인/반려
       ↓
 승인 → object_relations (확정) + rollup rebuild 트리거
 반려 → status='REJECTED'
 ```
 
-### 7.2 Domain 승인
+### 8.2 Domain 승인
+
+#### API 경로
+
+| Method | Path | 설명 |
+|--------|------|------|
+| `GET` | `/api/inference/domain-candidates?workspaceId=&status=PENDING` | 도메인 후보 목록 조회 |
+| `PATCH` | `/api/inference/domain-candidates/:id` | 승인/거부 (body: `{ status }`) |
+| `GET` | `/api/inference/discovery-runs?workspaceId=` | Discovery 실행 이력 조회 |
+| `POST` | `/api/inference/discovery-runs/:runId/apply` | Discovery 결과 적용 (→ affinities) |
+
+#### 승인 흐름
 
 ```
 domain_candidates (PENDING)
       ↓
 승인 UI:
   - affinity 분포 확인 (primary/secondary/purity)
-  - 신호 근거 확인
+  - 신호 근거 확인 (code/db/msg 각각의 기여도)
   - 일괄 승인/반려
       ↓
 승인 → object_domain_affinities (확정) + DOMAIN_TO_DOMAIN rollup 트리거
 반려 → status='REJECTED'
 ```
 
-### 7.3 편집 우선순위
+### 8.3 편집 우선순위
 
 **수동 오버라이드 > 자동 추론**
 
@@ -368,10 +700,48 @@ domain_candidates (PENDING)
 
 ---
 
+## 9. 구현 로드맵
+
+### Phase 1 — 추론 파이프라인 MVP (v2.0)
+
+| 순서 | 작업 | 예상 효과 |
+|------|------|----------|
+| 1 | Config 기반 Relation 추론 (`configBased.ts` 구현) | 서비스↔DB, 서비스↔Broker 관계 자동 발견 (30~40%) |
+| 2 | Regex 기반 Code Signal 추출 | 서비스↔서비스 call, expose, produce/consume (30~40%) |
+| 3 | DB Signal 구현 (`seedBased.ts`의 `dbScore`) | Domain 추론 정확도 향상 |
+| 4 | Domain Candidates 승인 API + UI | Track A/B 결과 활용 |
+| 5 | Discovery 다중 레이어 통합 | Track B 정확도 향상 |
+| 6 | 클러스터 Label 자동 추출 | Discovery UX 개선 |
+
+**Phase 1 완료 시 목표: 전체 Relation의 60~80% 자동 추론**
+
+### Phase 2 — AST 기반 정밀 추출 (v2.1)
+
+| 순서 | 작업 | 예상 효과 |
+|------|------|----------|
+| 1 | Tree-sitter Java/Kotlin 플러그인 | Spring Boot 프로젝트 정밀 분석 (confidence +0.1~0.2) |
+| 2 | Tree-sitter TypeScript/JS 플러그인 | Node.js 프로젝트 정밀 분석 |
+| 3 | Tree-sitter Python 플러그인 | Python 서비스 정밀 분석 |
+| 4 | 변수 추적 (data-flow analysis) | Phase 1 미감지 패턴 커버 |
+
+**Phase 2 완료 시 목표: 전체 Relation의 85~95% 자동 추론**
+
+### Phase 3 — 고도화 (v2.2+)
+
+| 작업 | 설명 |
+|------|------|
+| Message Signal 구현 (`seedBased.ts`의 `msgScore`) | 토픽 네이밍 패턴 기반 도메인 추론 |
+| 증분 추론 | 변경된 파일/설정만 재분석, 기존 결과 유지 |
+| Evidence Assembler 고도화 | AI Chat에서 추론 근거 체인 표시 |
+| 인덱스/Unique 제약조건 분석 | DB 추론 확장 (세밀한 테이블 관계) |
+
+---
+
 ## 관련 문서
 
 | 문서 | 설명 |
 |------|------|
-| [02-data-model.md](./02-data-model.md) | 추론 관련 테이블 스키마 |
+| [02-data-model.md](./02-data-model.md) | 추론 관련 테이블 스키마 (21개 테이블) |
 | [05-rollup-and-graph.md](./05-rollup-and-graph.md) | 승인 후 Roll-up 재빌드 |
 | [04-query-engine.md](./04-query-engine.md) | 추론 결과 활용 (Query Engine) |
+| [08-roadmap.md](./08-roadmap.md) | 전체 로드맵 |

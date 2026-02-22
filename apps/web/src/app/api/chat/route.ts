@@ -108,11 +108,11 @@ export async function POST(req: Request) {
       model,
       system: SYSTEM_PROMPT + queryContext,
       messages,
-      maxTokens: 2048,
+      maxOutputTokens: 2048,
       temperature: 0.3,
     });
 
-    return result.toDataStreamResponse();
+    return result.toUIMessageStreamResponse();
   } catch (error) {
     console.error('[POST /api/chat]', error);
     return new Response('AI 서비스 오류', { status: 500 });

@@ -1,12 +1,13 @@
 /**
  * 플로팅 AI 채팅 패널
  * FAB 버튼(우하단) → 클릭 시 슬라이드 업 채팅 창
- * v1 agent-chat.tsx 패턴 + framer-motion 애니메이션
+ * AI SDK v6 호환: sendMessage, status, DefaultChatTransport, parts 기반 렌더링
  */
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { useChat } from 'ai/react';
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   MessageSquare,
@@ -27,37 +28,56 @@ const EXAMPLE_QUESTIONS = [
   '주문 도메인에 속하는 서비스 목록은?',
 ];
 
+/** localStorage에 저장된 AI 설정을 헤더로 전달 */
+function getAiHeaders(): Record<string, string> {
+  try {
+    const provider = localStorage.getItem('archi-navi:ai-provider');
+    const apiKey = localStorage.getItem('archi-navi:ai-api-key');
+    const model = localStorage.getItem('archi-navi:ai-model');
+    const headers: Record<string, string> = {};
+    if (provider) headers['x-ai-provider'] = provider;
+    if (apiKey) headers['x-ai-api-key'] = apiKey;
+    if (model) headers['x-ai-model'] = model;
+    return headers;
+  } catch {
+    return {};
+  }
+}
+
+/** 메시지에서 텍스트를 추출하는 헬퍼 */
+function getMessageText(msg: { parts?: Array<{ type: string; text?: string }>; content?: string }): string {
+  // v6: parts 기반 렌더링 우선
+  if (msg.parts) {
+    return msg.parts
+      .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+      .map((p) => p.text)
+      .join('');
+  }
+  // 하위 호환: content 필드
+  if (typeof msg.content === 'string') return msg.content;
+  return '';
+}
+
 export function FloatingChat() {
   const [isOpen, setIsOpen] = useState(false);
+  const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // localStorage에 저장된 AI 설정을 헤더로 전달
-  const getAiHeaders = () => {
-    try {
-      const provider = localStorage.getItem('archi-navi:ai-provider');
-      const apiKey = localStorage.getItem('archi-navi:ai-api-key');
-      const model = localStorage.getItem('archi-navi:ai-model');
-      const headers: Record<string, string> = {};
-      if (provider) headers['x-ai-provider'] = provider;
-      if (apiKey) headers['x-ai-api-key'] = apiKey;
-      if (model) headers['x-ai-model'] = model;
-      return headers;
-    } catch {
-      return {};
-    }
-  };
-
+  // AI SDK v6: DefaultChatTransport + sendMessage 패턴
   const {
     messages,
-    input,
-    handleInputChange,
-    handleSubmit,
-    isLoading,
+    sendMessage,
+    status,
     error,
   } = useChat({
-    api: '/api/chat',
-    headers: getAiHeaders(),
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+      headers: getAiHeaders(),
+    }),
   });
+
+  // 스트리밍 중인지 체크 (로딩 상태)
+  const isStreaming = status === 'submitted' || status === 'streaming';
 
   // 새 메시지 → 스크롤 하단 이동
   useEffect(() => {
@@ -79,6 +99,26 @@ export function FloatingChat() {
   }, []);
 
   const toggle = useCallback(() => setIsOpen((prev) => !prev), []);
+
+  /** 폼 제출 핸들러 */
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      const trimmed = input.trim();
+      if (!trimmed) return;
+      sendMessage({ text: trimmed });
+      setInput('');
+    },
+    [input, sendMessage],
+  );
+
+  /** 예시 질문 클릭 → 바로 전송 */
+  const handleExampleClick = useCallback(
+    (question: string) => {
+      sendMessage({ text: question });
+    },
+    [sendMessage],
+  );
 
   return (
     <>
@@ -154,12 +194,7 @@ export function FloatingChat() {
                     {EXAMPLE_QUESTIONS.map((q) => (
                       <button
                         key={q}
-                        onClick={() => {
-                          const event = {
-                            target: { value: q },
-                          } as React.ChangeEvent<HTMLInputElement>;
-                          handleInputChange(event);
-                        }}
+                        onClick={() => handleExampleClick(q)}
                         className={cn(
                           'rounded-lg px-3 py-2 text-left text-xs',
                           'glass-card',
@@ -173,45 +208,49 @@ export function FloatingChat() {
                 </div>
               ) : (
                 /* 메시지 목록 */
-                messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={cn(
-                      'flex gap-2',
-                      msg.role === 'user' ? 'justify-end' : 'justify-start',
-                    )}
-                  >
-                    {/* Bot 아이콘 */}
-                    {msg.role !== 'user' && (
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
-                        <Bot className="h-3.5 w-3.5" />
-                      </div>
-                    )}
-
-                    {/* 메시지 버블 */}
+                messages.map((msg) => {
+                  const text = getMessageText(msg);
+                  if (!text) return null;
+                  return (
                     <div
+                      key={msg.id}
                       className={cn(
-                        'max-w-[280px] rounded-xl px-3 py-2 text-sm leading-relaxed',
-                        msg.role === 'user'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted/80 text-foreground',
+                        'flex gap-2',
+                        msg.role === 'user' ? 'justify-end' : 'justify-start',
                       )}
                     >
-                      {msg.content}
-                    </div>
+                      {/* Bot 아이콘 */}
+                      {msg.role !== 'user' && (
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
+                          <Bot className="h-3.5 w-3.5" />
+                        </div>
+                      )}
 
-                    {/* User 아이콘 */}
-                    {msg.role === 'user' && (
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                        <User className="h-3.5 w-3.5" />
+                      {/* 메시지 버블 */}
+                      <div
+                        className={cn(
+                          'max-w-[280px] rounded-xl px-3 py-2 text-sm leading-relaxed',
+                          msg.role === 'user'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted/80 text-foreground',
+                        )}
+                      >
+                        {text}
                       </div>
-                    )}
-                  </div>
-                ))
+
+                      {/* User 아이콘 */}
+                      {msg.role === 'user' && (
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                          <User className="h-3.5 w-3.5" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
 
               {/* 로딩 인디케이터 */}
-              {isLoading && (
+              {isStreaming && (
                 <div className="flex gap-2">
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
                     <Bot className="h-3.5 w-3.5" />
@@ -240,18 +279,18 @@ export function FloatingChat() {
               >
                 <Input
                   value={input}
-                  onChange={handleInputChange}
+                  onChange={(e) => setInput(e.target.value)}
                   placeholder="질문을 입력하세요..."
-                  disabled={isLoading}
+                  disabled={status !== 'ready'}
                   className="flex-1 h-9 text-sm bg-muted/50 border-white/10"
                 />
                 <Button
                   type="submit"
                   size="sm"
-                  disabled={isLoading || !input.trim()}
+                  disabled={status !== 'ready' || !input.trim()}
                   className="h-9 w-9 p-0"
                 >
-                  {isLoading ? (
+                  {isStreaming ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Send className="h-4 w-4" />

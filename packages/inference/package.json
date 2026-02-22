@@ -20,12 +20,12 @@
     "@archi-navi/db": "workspace:*",
     "@archi-navi/shared": "workspace:*",
     "drizzle-orm": "^0.45.1",
-    "graphology": "^0.25.4",
+    "graphology": "^0.26.0",
     "graphology-communities-louvain": "^2.0.2"
   },
   "devDependencies": {
     "@types/node": "^25.3.0",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.6"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }
