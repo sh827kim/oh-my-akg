@@ -1,93 +1,36 @@
 {
   "name": "archi-navi",
   "version": "0.1.0",
-  "private": false,
-  "bin": {
-    "archi-navi": "packages/cli/bin/archi-navi.js"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "files": [
-    "apps/README.md",
-    "apps/web/app",
-    "apps/web/components",
-    "apps/web/public",
-    "apps/web/package.json",
-    "apps/web/next.config.ts",
-    "apps/web/postcss.config.mjs",
-    "apps/web/eslint.config.mjs",
-    "apps/web/tsconfig.json",
-    "apps/web/next-env.d.ts",
-    "packages",
-    "scripts",
-    "lib",
-    "LICENSE",
-    "README.md",
-    "README.ko.md",
-    "tsconfig.json",
-    "tsconfig.scripts.json",
-    "pnpm-workspace.yaml"
-  ],
+  "private": true,
+  "description": "Local-first architecture navigation tool for distributed service environments",
   "scripts": {
-    "dev": "pnpm --filter @archi-navi/web dev",
-    "dev:web": "pnpm --filter @archi-navi/web dev",
-    "build": "pnpm --filter @archi-navi/web build",
-    "build:web": "pnpm --filter @archi-navi/web build",
-    "start": "pnpm --filter @archi-navi/web start",
-    "start:web": "pnpm --filter @archi-navi/web start",
-    "lint": "pnpm --filter @archi-navi/web lint",
-    "lint:web": "pnpm --filter @archi-navi/web lint",
-    "cli": "pnpm --filter @archi-navi/cli dev",
-    "cli:pkg": "pnpm --filter @archi-navi/cli dev",
-    "verify:legacy-sql": "ts-node -P tsconfig.scripts.json scripts/check-no-legacy-table-usage.ts",
-    "verify:task1-5:smoke": "ts-node -P tsconfig.scripts.json scripts/task1-5-smoke-test.ts",
-    "verify:task1-5:integrity": "ts-node -P tsconfig.scripts.json scripts/check-object-model-integrity.ts",
-    "verify:task2-4:approval-gate": "ts-node -P tsconfig.scripts.json scripts/task2-4-approval-gate-test.ts",
-    "verify:task2-7:inference": "ts-node -P tsconfig.scripts.json scripts/task2-7-inference-pipeline-test.ts",
-    "verify:task2-8:benchmark": "ts-node -P tsconfig.scripts.json scripts/task2-8-inference-benchmark.ts",
-    "ws:list": "pnpm -r list --depth -1",
-    "pack:check": "npm_config_cache=.npm-cache npm pack --dry-run"
-  },
-  "dependencies": {
-    "@electric-sql/pglite": "^0.3.15",
-    "@electric-sql/pglite-repl": "^0.2.33",
-    "@langchain/community": "^1.1.16",
-    "@langchain/core": "^1.1.26",
-    "@langchain/openai": "^1.2.8",
-    "@radix-ui/react-dialog": "^1.1.15",
-    "@radix-ui/react-dropdown-menu": "^2.1.16",
-    "@radix-ui/react-select": "^2.2.6",
-    "@radix-ui/react-tabs": "^1.1.13",
-    "@radix-ui/themes": "^3.3.0",
-    "ag-grid-community": "^35.1.0",
-    "ag-grid-react": "^35.1.0",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "cmdk": "^1.1.1",
-    "commander": "^14.0.3",
-    "cytoscape": "^3.33.1",
-    "cytoscape-dagre": "^2.5.0",
-    "cytoscape-edgehandles": "^4.0.1",
-    "dotenv": "^17.3.1",
-    "lucide-react": "^0.574.0",
-    "next": "16.1.6",
-    "octokit": "^5.0.5",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "sonner": "^2.0.7",
-    "ts-node": "^10.9.2",
-    "tailwind-merge": "^3.5.0",
-    "use-debounce": "^10.1.0"
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:e2e": "turbo run test:e2e",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\" --ignore-path .gitignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\" --ignore-path .gitignore",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "db:generate": "turbo run db:generate --filter=@archi-navi/db",
+    "db:migrate": "turbo run db:migrate --filter=@archi-navi/db",
+    "db:studio": "turbo run db:studio --filter=@archi-navi/db"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.1.6",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "turbo": "^2.4.4",
+    "prettier": "^3.5.1",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "packageManager": "pnpm@10.26.2",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp", "unrs-resolver"],
+    "overrides": {
+      "drizzle-orm": "^0.45.1"
+    }
   }
 }

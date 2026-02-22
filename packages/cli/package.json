@@ -1,17 +1,36 @@
 {
   "name": "@archi-navi/cli",
   "version": "0.1.0",
-  "private": true,
-  "description": "Archi.Navi CLI",
-  "dependencies": {
-    "@archi-navi/config": "workspace:*",
-    "@archi-navi/core": "workspace:*",
-    "@archi-navi/inference": "workspace:*"
-  },
+  "private": false,
+  "description": "CLI tool for Archi.Navi",
   "bin": {
     "archi-navi": "./bin/archi-navi.js"
   },
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "require": "./src/index.ts"
+    }
+  },
   "scripts": {
-    "dev": "ts-node -P ./tsconfig.json ./src/index.ts"
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@archi-navi/core": "workspace:*",
+    "@archi-navi/db": "workspace:*",
+    "@archi-navi/inference": "workspace:*",
+    "@archi-navi/shared": "workspace:*",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "drizzle-orm": "^0.45.1",
+    "ora": "^8.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
   }
 }

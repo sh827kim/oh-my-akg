@@ -1,0 +1,40 @@
+{
+  "name": "@archi-navi/db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Database schema, migrations, and client for Archi.Navi",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "require": "./src/index.ts"
+    },
+    "./schema": {
+      "import": "./src/schema/index.ts",
+      "require": "./src/schema/index.ts"
+    },
+    "./client": {
+      "import": "./src/client.ts",
+      "require": "./src/client.ts"
+    }
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "db:push": "drizzle-kit push",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@archi-navi/shared": "workspace:*",
+    "@electric-sql/pglite": "^0.3.1",
+    "drizzle-orm": "^0.40.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "@types/pg": "^8.11.11",
+    "drizzle-kit": "^0.30.4",
+    "pg": "^8.13.1",
+    "typescript": "^5.7.3"
+  }
+}

@@ -2,20 +2,30 @@
   "name": "@archi-navi/inference",
   "version": "0.1.0",
   "private": true,
-  "description": "Inference pipeline with real AST parsers",
+  "description": "Inference engines: relation and domain inference for Archi.Navi",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "require": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
   "dependencies": {
-    "@archi-navi/config": "workspace:*",
-    "@babel/parser": "^7.25.0",
-    "@babel/traverse": "^7.25.0",
-    "@babel/types": "^7.25.0",
-    "node-sql-parser": "^5.0.0",
-    "web-tree-sitter": "^0.24.0"
+    "@archi-navi/core": "workspace:*",
+    "@archi-navi/db": "workspace:*",
+    "@archi-navi/shared": "workspace:*",
+    "drizzle-orm": "^0.45.1",
+    "graphology": "^0.25.4",
+    "graphology-communities-louvain": "^2.0.2"
   },
   "devDependencies": {
-    "@types/babel__traverse": "^7.20.0",
-    "tree-sitter-java": "^0.23.0",
-    "tree-sitter-python": "^0.23.0"
-  },
-  "main": "src/index.ts",
-  "types": "src/index.ts"
+    "@types/node": "^25.3.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.6"
+  }
 }
