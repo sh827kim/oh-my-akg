@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "lint": "tsc --noEmit",
     "clean": "rm -rf dist"
   },

@@ -226,10 +226,17 @@ function DevTools({ workspaceId }: { workspaceId: string }) {
       });
       if (!res.ok) throw new Error('seed failed');
       const data = (await res.json()) as {
-        inserted: { layers: number; objects: number; relations: number };
+        inserted: {
+          layers: number;
+          tags: number;
+          objects: number;
+          compoundRelations: number;
+          atomicRelations: number;
+        };
       };
+      const { layers, tags, objects, compoundRelations, atomicRelations } = data.inserted;
       toast.success(
-        `샘플 데이터 주입 완료 — 레이어 ${data.inserted.layers}개, 오브젝트 ${data.inserted.objects}개, 관계 ${data.inserted.relations}개`,
+        `샘플 데이터 주입 완료 — 레이어 ${layers}개, 태그 ${tags}개, 오브젝트 ${objects}개, COMPOUND 관계 ${compoundRelations}개, ATOMIC 관계 ${atomicRelations}개`,
       );
     } catch {
       toast.error('샘플 데이터 주입 실패');
@@ -272,7 +279,7 @@ function DevTools({ workspaceId }: { workspaceId: string }) {
             <div>
               <div className="text-sm font-medium text-foreground">샘플 데이터 주입</div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                레이어 4개 + 서비스 10개 + 관계 7개의 예시 데이터
+                레이어 4개 · COMPOUND 12개 · ATOMIC 31개 · 관계 56개 (쇼핑몰 마이크로서비스)
               </div>
             </div>
             <Button
@@ -1217,45 +1224,118 @@ interface ScanApiResult {
   skipped: number;
 }
 
+/** SSE 스트림에서 서버가 보내는 이벤트 형식 */
+type ScanStreamEvent =
+  | { type: 'start'; total: number }
+  | { type: 'progress'; current: number; total: number; message: string }
+  | { type: 'complete'; result: ScanApiResult }
+  | { type: 'error'; message: string };
+
 function ScanSettings({ workspaceId }: { workspaceId: string }) {
   const [mode, setMode] = useState<'local' | 'workspace-dir' | 'github-repo' | 'github-org'>('local');
   const [target, setTarget] = useState('');
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<ScanApiResult | null>(null);
+  // 스캔 진행 상태 (모달 표시용)
+  const [progress, setProgress] = useState(0);           // 0~100
+  const [progressMessage, setProgressMessage] = useState('');
+  const [progressTotal, setProgressTotal] = useState(0); // 총 레포 수
 
   const selectedMode = SCAN_MODES.find((m) => m.value === mode)!;
   const isGithub = mode === 'github-repo' || mode === 'github-org';
 
-  /** 스캔 실행 */
+  /** 스캔 실행 (SSE 스트리밍으로 진행 상황 수신) */
   const executeScan = async (dryRun: boolean) => {
     if (!target.trim()) {
       toast.error('스캔 대상을 입력하세요');
       return;
     }
+
     setScanning(true);
     setResult(null);
+    setProgress(0);
+    setProgressMessage('연결 중...');
+    setProgressTotal(0);
+
+    // 브라우저 새로고침 / 탭 닫기 방지
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     try {
       const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspaceId, mode, target: target.trim(), dryRun }),
       });
-      if (!res.ok) {
+
+      // HTTP 에러 (스트림 시작 전)
+      if (!res.ok || !res.body) {
         const err = (await res.json()) as { error?: string };
         throw new Error(err.error ?? `스캔 실패 (${res.status})`);
       }
-      const data = (await res.json()) as ScanApiResult;
-      setResult(data);
 
-      if (dryRun) {
-        toast.success(`${data.projects.length}개 프로젝트 발견 (미리보기)`);
-      } else {
-        toast.success(`${data.registered}개 등록, ${data.skipped}개 스킵`);
+      // SSE 스트림 읽기
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalResult: ScanApiResult | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        // 청크를 줄 단위로 분리해서 이벤트 파싱
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? ''; // 마지막 불완전 줄은 다음 청크와 합침
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+
+          let event: ScanStreamEvent;
+          try {
+            event = JSON.parse(line.slice(6)) as ScanStreamEvent;
+          } catch {
+            continue; // 불완전한 JSON 청크 무시
+          }
+
+          if (event.type === 'start') {
+            setProgressTotal(event.total);
+            setProgressMessage(
+              event.total > 0 ? `0 / ${event.total} 처리 중...` : '스캔 시작...',
+            );
+          } else if (event.type === 'progress') {
+            const pct = event.total > 0 ? (event.current / event.total) * 100 : 50;
+            setProgress(pct);
+            setProgressMessage(event.message);
+          } else if (event.type === 'complete') {
+            setProgress(100);
+            setProgressMessage('완료!');
+            finalResult = event.result;
+          } else if (event.type === 'error') {
+            throw new Error(event.message);
+          }
+        }
+      }
+
+      if (finalResult) {
+        setResult(finalResult);
+        if (dryRun) {
+          toast.success(`${finalResult.projects.length}개 프로젝트 발견 (미리보기)`);
+        } else {
+          toast.success(`${finalResult.registered}개 등록, ${finalResult.skipped}개 스킵`);
+        }
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '스캔 실패');
     } finally {
       setScanning(false);
+      setProgress(0);
+      setProgressMessage('');
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     }
   };
 
@@ -1273,6 +1353,46 @@ function ScanSettings({ workspaceId }: { workspaceId: string }) {
   };
 
   return (
+    <>
+    {/* ── 스캔 진행 모달 (블로킹 오버레이) ── */}
+    {scanning && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="w-full max-w-sm mx-4 rounded-2xl border border-border bg-card/95 p-6 shadow-2xl">
+          {/* 헤더 */}
+          <div className="flex items-center gap-3 mb-5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/20">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">스캔 중...</p>
+              <p className="truncate text-xs text-muted-foreground">{target}</p>
+            </div>
+          </div>
+
+          {/* 진행률 바 */}
+          <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+
+          {/* 진행 텍스트 */}
+          <div className="mb-5 flex items-center justify-between text-xs text-muted-foreground">
+            <span className="mr-2 truncate">{progressMessage || '처리 중...'}</span>
+            {progressTotal > 0 && (
+              <span className="shrink-0 tabular-nums">{Math.round(progress)}%</span>
+            )}
+          </div>
+
+          {/* 안내 문구 */}
+          <p className="text-center text-[11px] text-muted-foreground/60">
+            스캔이 완료될 때까지 페이지를 닫거나 이동하지 마세요
+          </p>
+        </div>
+      </div>
+    )}
+
     <div className="space-y-4">
       {/* 모드 선택 */}
       <Card className="glass-card">
@@ -1407,5 +1527,6 @@ function ScanSettings({ workspaceId }: { workspaceId: string }) {
         </Card>
       )}
     </div>
+    </>
   );
 }
