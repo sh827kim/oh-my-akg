@@ -28,7 +28,7 @@
   "dependencies": {
     "@archi-navi/shared": "workspace:*",
     "@electric-sql/pglite": "^0.3.1",
-    "drizzle-orm": "^0.40.0"
+    "drizzle-orm": "^0.45.1"
   },
   "devDependencies": {
     "@types/node": "^25.3.0",

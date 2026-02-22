@@ -1,129 +1,50 @@
 /**
- * WorkspaceContext
- * 현재 선택된 워크스페이스 ID를 전역 상태로 관리
- * localStorage에 유지하여 새로고침 후에도 보존
+ * workspace-context.tsx — Zustand 전환 후 하위 호환 shim
+ *
+ * 실제 상태 로직은 @/stores/workspace 로 이전했고,
+ * 이 파일은 기존 import 경로(@/contexts/workspace-context)를 유지하기 위한 re-export.
+ *
+ * ── 변경 전 ──────────────────────────────────────
+ *   React Context + useState + localStorage 직접 접근
+ *   → Provider가 상태를 소유하고 useContext로 전달
+ *
+ * ── 변경 후 ──────────────────────────────────────
+ *   Zustand store(@/stores/workspace)가 상태 소유
+ *   → Provider 불필요, 어디서든 useWorkspaceStore() 직접 호출 가능
+ *   → WorkspaceProvider는 앱 시작 시 refreshWorkspaces()만 실행하는 초기화 컴포넌트
+ * ────────────────────────────────────────────────
+ *
+ * 기존 사용 코드는 변경 없이 동작:
+ *   import { useWorkspace } from '@/contexts/workspace-context'
+ *   const { workspaceId, setWorkspace } = useWorkspace()
  */
 'use client';
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-} from 'react';
-import { DEFAULT_WORKSPACE_ID } from '@archi-navi/shared';
+import { useEffect } from 'react';
+import { useWorkspaceStore } from '@/stores/workspace';
 
-/* ─── 타입 ─── */
-export interface WorkspaceItem {
-  id: string;
-  name: string;
-  createdAt: string;
-}
+/* ─── 타입 re-export (기존 import 유지) ─── */
+export type { WorkspaceItem } from '@/stores/workspace';
 
-interface WorkspaceContextValue {
-  /** 현재 선택된 워크스페이스 ID */
-  workspaceId: string;
-  /** 현재 워크스페이스 이름 */
-  workspaceName: string;
-  /** 전체 워크스페이스 목록 */
-  workspaces: WorkspaceItem[];
-  /** 워크스페이스 전환 */
-  setWorkspace: (id: string) => void;
-  /** 목록 새로고침 */
-  refreshWorkspaces: () => Promise<void>;
-}
+/* ─── 훅 re-export ─── */
+export { useWorkspaceStore as useWorkspace } from '@/stores/workspace';
 
-const STORAGE_KEY = 'archi-navi:workspace-id';
+/* ─── WorkspaceProvider ─────────────────────────────────────────────────────
+ * Zustand는 Provider가 필요 없지만,
+ * layout.tsx의 <WorkspaceProvider> 래핑을 유지하면서
+ * 앱 마운트 시 워크스페이스 목록을 한 번 fetch하는 역할을 담당.
+ *
+ * SSR hydration mismatch 문제:
+ *   - 기존: mounted state로 클라이언트 전용 렌더링 분기
+ *   - 현재: Zustand persist가 클라이언트에서만 실행되므로 자동 안전
+ * ─────────────────────────────────────────────────────────────────────────── */
+export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+  const refreshWorkspaces = useWorkspaceStore((s) => s.refreshWorkspaces);
 
-/* ─── Context ─── */
-const WorkspaceContext = createContext<WorkspaceContextValue>({
-  workspaceId: DEFAULT_WORKSPACE_ID,
-  workspaceName: 'Default Workspace',
-  workspaces: [],
-  setWorkspace: () => {},
-  refreshWorkspaces: async () => {},
-});
-
-/* ─── Provider ─── */
-export function WorkspaceProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  // localStorage에서 초기값 복원 (SSR에서는 기본값 사용)
-  const [workspaceId, setWorkspaceId] = useState<string>(DEFAULT_WORKSPACE_ID);
-  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
-  const [mounted, setMounted] = useState(false);
-
-  // 현재 워크스페이스 이름 계산
-  const workspaceName =
-    workspaces.find((w) => w.id === workspaceId)?.name ?? 'Default Workspace';
-
-  // 워크스페이스 목록 fetch
-  const refreshWorkspaces = useCallback(async () => {
-    try {
-      const res = await fetch('/api/workspaces');
-      if (!res.ok) return;
-      const data = (await res.json()) as WorkspaceItem[];
-      setWorkspaces(data);
-
-      // 저장된 워크스페이스가 목록에 없으면 기본값으로 복원
-      const saved = localStorage.getItem(STORAGE_KEY) ?? DEFAULT_WORKSPACE_ID;
-      const found = data.find((w) => w.id === saved);
-      setWorkspaceId(found ? saved : DEFAULT_WORKSPACE_ID);
-    } catch {
-      console.error('[WorkspaceContext] 워크스페이스 목록 로드 실패');
-    }
-  }, []);
-
-  // 클라이언트 마운트 후 localStorage 읽기
+  // 앱 시작 시 워크스페이스 목록 초기 로드
   useEffect(() => {
-    setMounted(true);
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) setWorkspaceId(saved);
     void refreshWorkspaces();
   }, [refreshWorkspaces]);
 
-  // 워크스페이스 전환
-  const setWorkspace = useCallback((id: string) => {
-    setWorkspaceId(id);
-    localStorage.setItem(STORAGE_KEY, id);
-  }, []);
-
-  // SSR hydration mismatch 방지
-  if (!mounted) {
-    return (
-      <WorkspaceContext.Provider
-        value={{
-          workspaceId: DEFAULT_WORKSPACE_ID,
-          workspaceName: 'Default Workspace',
-          workspaces: [],
-          setWorkspace,
-          refreshWorkspaces,
-        }}
-      >
-        {children}
-      </WorkspaceContext.Provider>
-    );
-  }
-
-  return (
-    <WorkspaceContext.Provider
-      value={{
-        workspaceId,
-        workspaceName,
-        workspaces,
-        setWorkspace,
-        refreshWorkspaces,
-      }}
-    >
-      {children}
-    </WorkspaceContext.Provider>
-  );
-}
-
-/* ─── Hook ─── */
-export function useWorkspace() {
-  return useContext(WorkspaceContext);
+  return <>{children}</>;
 }

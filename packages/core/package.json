@@ -18,7 +18,7 @@
   "dependencies": {
     "@archi-navi/db": "workspace:*",
     "@archi-navi/shared": "workspace:*",
-    "drizzle-orm": "^0.40.1",
+    "drizzle-orm": "^0.45.1",
     "graphology": "^0.25.4",
     "graphology-shortest-path": "^2.1.0",
     "graphology-traversal": "^0.3.1"
