@@ -6,14 +6,14 @@ interface ParamsContext {
 }
 
 interface DependencyRow {
-  project_id: string;
+  service_id: string;
   label: string;
   type: string;
 }
 
 export async function GET(_: NextRequest, context: ParamsContext) {
   try {
-    const { id: projectUrn } = await context.params;
+    const { id: serviceUrn } = await context.params;
     const db = await getDb();
 
     const objectRes = await db.query<{ id: string }>(
@@ -22,7 +22,7 @@ export async function GET(_: NextRequest, context: ParamsContext) {
        WHERE workspace_id = 'default'
          AND object_type = 'service'
          AND urn = $1`,
-      [projectUrn],
+      [serviceUrn],
     );
 
     const objectId = objectRes.rows[0]?.id;
@@ -33,7 +33,7 @@ export async function GET(_: NextRequest, context: ParamsContext) {
     const [inboundResult, outboundResult] = await Promise.all([
       db.query<DependencyRow>(
         `SELECT
-           o_from.urn AS project_id,
+           o_from.urn AS service_id,
            COALESCE(NULLIF(o_from.display_name, ''), o_from.name) AS label,
            r.relation_type AS type
          FROM approved_object_relations r
@@ -48,7 +48,7 @@ export async function GET(_: NextRequest, context: ParamsContext) {
       ),
       db.query<DependencyRow>(
         `SELECT
-           o_to.urn AS project_id,
+           o_to.urn AS service_id,
            COALESCE(NULLIF(o_to.display_name, ''), o_to.name) AS label,
            r.relation_type AS type
          FROM approved_object_relations r

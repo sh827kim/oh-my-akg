@@ -2,24 +2,7 @@
 -- Archi.Navi Canonical Schema (Object Model First)
 -- ---------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS project_types (
-  id SERIAL PRIMARY KEY,
-  name TEXT UNIQUE NOT NULL,
-  color_hex TEXT NOT NULL DEFAULT '#6b7280',
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
 
-INSERT INTO project_types (name, color_hex, sort_order, enabled)
-VALUES
-  ('frontend', '#3b82f6', 10, TRUE),
-  ('backend', '#10b981', 20, TRUE),
-  ('middleware', '#f59e0b', 30, TRUE),
-  ('database', '#ef4444', 40, TRUE),
-  ('unknown', '#6b7280', 999, TRUE)
-ON CONFLICT (name) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS tags (
   id SERIAL PRIMARY KEY,
@@ -142,7 +125,7 @@ CREATE TABLE IF NOT EXISTS change_requests (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
   reviewed_at TIMESTAMP WITH TIME ZONE,
   CONSTRAINT change_requests_request_type_check CHECK (
-    request_type IN ('RELATION_UPSERT', 'RELATION_DELETE', 'OBJECT_PATCH')
+    request_type IN ('RELATION_UPSERT', 'RELATION_DELETE', 'OBJECT_PATCH', 'OBJECT_CREATE')
   ),
   CONSTRAINT change_requests_status_check CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED'))
 );

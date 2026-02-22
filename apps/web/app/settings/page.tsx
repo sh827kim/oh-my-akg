@@ -6,7 +6,7 @@ import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
-interface ProjectType {
+interface ServiceType {
     id: number;
     name: string;
     color: string;
@@ -23,7 +23,7 @@ interface TagItem {
 export default function SettingsPage() {
     const router = useRouter();
 
-    const [types, setTypes] = useState<ProjectType[]>([]);
+    const [types, setTypes] = useState<ServiceType[]>([]);
     const [tags, setTags] = useState<TagItem[]>([]);
 
     const [loading, setLoading] = useState(true);
@@ -35,7 +35,7 @@ export default function SettingsPage() {
     const [newTagName, setNewTagName] = useState('');
     const [newTagColor, setNewTagColor] = useState('#6b7280');
 
-    const [deleteTypeTarget, setDeleteTypeTarget] = useState<ProjectType | null>(null);
+    const [deleteTypeTarget, setDeleteTypeTarget] = useState<ServiceType | null>(null);
     const [deleteTagTarget, setDeleteTagTarget] = useState<TagItem | null>(null);
     const [seedConfirmOpen, setSeedConfirmOpen] = useState(false);
     const [seedLoading, setSeedLoading] = useState(false);
@@ -62,7 +62,7 @@ export default function SettingsPage() {
                 throw new Error(tagsJson.error || '태그 목록 조회 실패');
             }
 
-            setTypes(typesJson as ProjectType[]);
+            setTypes(typesJson as ServiceType[]);
             setTags(tagsJson as TagItem[]);
         } catch (error) {
             toast.error(error instanceof Error ? error.message : '설정 로딩 실패');
@@ -101,7 +101,7 @@ export default function SettingsPage() {
         }
     };
 
-    const patchType = async (typeId: number, patch: Partial<ProjectType>) => {
+    const patchType = async (typeId: number, patch: Partial<ServiceType>) => {
         const res = await fetch(`/api/settings/types/${typeId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -111,7 +111,7 @@ export default function SettingsPage() {
         if (!res.ok) {
             throw new Error(json.error || '타입 저장 실패');
         }
-        const updated = json as ProjectType;
+        const updated = json as ServiceType;
         setTypes((prev) => prev.map((item) => (item.id === typeId ? updated : item)));
     };
 
@@ -144,7 +144,7 @@ export default function SettingsPage() {
             const json = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(json.error || '타입 생성 실패');
 
-            setTypes((prev) => [...prev, json as ProjectType]);
+            setTypes((prev) => [...prev, json as ServiceType]);
             setNewTypeName('');
             setNewTypeColor('#6b7280');
             toast.success('타입이 추가되었습니다.');

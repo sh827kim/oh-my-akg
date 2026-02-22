@@ -52,14 +52,14 @@ export function DependencyGraph({ data, selectedNodeId, searchQuery }: Dependenc
         setGraphData(data);
     }, [data]);
 
-    const hideProject = useCallback(
-        async (projectId: string) => {
+    const hideService = useCallback(
+        async (serviceId: string) => {
             try {
                 setIsHiding(true);
                 const res = await fetch('/api/objects', {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: projectId, visibility: 'HIDDEN' }),
+                    body: JSON.stringify({ id: serviceId, visibility: 'HIDDEN' }),
                 });
 
                 if (!res.ok) {
@@ -68,14 +68,14 @@ export function DependencyGraph({ data, selectedNodeId, searchQuery }: Dependenc
                 }
 
                 setGraphData((prev) => ({
-                    nodes: prev.nodes.filter((node) => node.data.id !== projectId),
+                    nodes: prev.nodes.filter((node) => node.data.id !== serviceId),
                     edges: prev.edges.filter(
-                        (edge) => edge.data.source !== projectId && edge.data.target !== projectId
+                        (edge) => edge.data.source !== serviceId && edge.data.target !== serviceId
                     ),
                 }));
 
                 const params = new URLSearchParams(searchParams.toString());
-                if (params.get('node') === projectId) {
+                if (params.get('node') === serviceId) {
                     params.delete('node');
                     const qs = params.toString();
                     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
@@ -338,7 +338,7 @@ export function DependencyGraph({ data, selectedNodeId, searchQuery }: Dependenc
                     if (!hideTarget) return;
                     const targetId = hideTarget.id;
                     setHideTarget(null);
-                    await hideProject(targetId);
+                    await hideService(targetId);
                 }}
             />
         </div>

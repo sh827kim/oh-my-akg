@@ -1,14 +1,14 @@
 import { getDb } from '@archi-navi/core';
 import { X } from 'lucide-react';
 import Link from 'next/link';
-import { getProjectTypeFromMetadata } from '@archi-navi/core';
+import { getServiceTypeFromMetadata } from '@archi-navi/core';
 
 interface SidePanelProps {
   nodeId: string;
   searchQuery?: string;
 }
 
-interface Project {
+interface Service {
   object_id: string;
   urn: string | null;
   name: string;
@@ -18,7 +18,7 @@ interface Project {
 }
 
 interface RelatedDependency {
-  project_id: string;
+  service_id: string;
   label: string;
   type: string;
 }
@@ -26,7 +26,7 @@ interface RelatedDependency {
 export async function SidePanel({ nodeId, searchQuery }: SidePanelProps) {
   const db = await getDb();
 
-  const projectRes = await db.query<Project>(
+  const serviceRes = await db.query<Service>(
     `SELECT id AS object_id, urn, name, display_name, metadata, updated_at
      FROM objects
      WHERE workspace_id = 'default'
@@ -35,12 +35,12 @@ export async function SidePanel({ nodeId, searchQuery }: SidePanelProps) {
     [nodeId],
   );
 
-  const project = projectRes.rows[0];
-  if (!project) return null;
+  const service = serviceRes.rows[0];
+  if (!service) return null;
 
   const inboundRes = await db.query<RelatedDependency>(
     `SELECT
-       o_from.urn AS project_id,
+       o_from.urn AS service_id,
        COALESCE(NULLIF(o_from.display_name, ''), o_from.name) AS label,
        r.relation_type AS type
      FROM approved_object_relations r
@@ -51,12 +51,12 @@ export async function SidePanel({ nodeId, searchQuery }: SidePanelProps) {
        AND o_from.visibility = 'VISIBLE'
        AND COALESCE(o_from.metadata->>'status', 'ACTIVE') = 'ACTIVE'
      ORDER BY o_from.name ASC`,
-    [project.object_id],
+    [service.object_id],
   );
 
   const outboundRes = await db.query<RelatedDependency>(
     `SELECT
-       o_to.urn AS project_id,
+       o_to.urn AS service_id,
        COALESCE(NULLIF(o_to.display_name, ''), o_to.name) AS label,
        r.relation_type AS type
      FROM approved_object_relations r
@@ -67,17 +67,17 @@ export async function SidePanel({ nodeId, searchQuery }: SidePanelProps) {
        AND o_to.visibility = 'VISIBLE'
        AND COALESCE(o_to.metadata->>'status', 'ACTIVE') = 'ACTIVE'
      ORDER BY o_to.name ASC`,
-    [project.object_id],
+    [service.object_id],
   );
 
-  const metadata = (project.metadata && typeof project.metadata === 'object')
-    ? (project.metadata as Record<string, unknown>)
+  const metadata = (service.metadata && typeof service.metadata === 'object')
+    ? (service.metadata as Record<string, unknown>)
     : {};
   const repoUrl = typeof metadata.repo_url === 'string' ? metadata.repo_url : '#';
   const description = typeof metadata.description === 'string' ? metadata.description : null;
-  const projectType = getProjectTypeFromMetadata(metadata);
+  const serviceType = getServiceTypeFromMetadata(metadata);
 
-  const title = project.display_name?.trim() ? project.display_name : project.name;
+  const title = service.display_name?.trim() ? service.display_name : service.name;
   const closeHref = searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : '?';
   const createNodeHref = (id: string) => {
     const params = new URLSearchParams();
@@ -101,15 +101,15 @@ export async function SidePanel({ nodeId, searchQuery }: SidePanelProps) {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">URN</span>
-              <span className="max-w-[170px] truncate text-gray-300">{project.urn}</span>
+              <span className="max-w-[170px] truncate text-gray-300">{service.urn}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Type</span>
-              <span className="text-blue-400">{projectType}</span>
+              <span className="text-blue-400">{serviceType}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Updated</span>
-              <span className="text-gray-300">{new Date(project.updated_at).toLocaleDateString()}</span>
+              <span className="text-gray-300">{new Date(service.updated_at).toLocaleDateString()}</span>
             </div>
             {description && <div className="mt-2 border-t border-[#222] pt-2 text-gray-400">{description}</div>}
           </div>
@@ -124,8 +124,8 @@ export async function SidePanel({ nodeId, searchQuery }: SidePanelProps) {
           ) : (
             <ul className="space-y-2">
               {outboundRes.rows.map((edge) => (
-                <li key={`${edge.project_id}-${edge.type}`} className="rounded bg-[#1a1a1a] p-2 text-sm">
-                  <Link href={createNodeHref(edge.project_id)} scroll={false}>
+                <li key={`${edge.service_id}-${edge.type}`} className="rounded bg-[#1a1a1a] p-2 text-sm">
+                  <Link href={createNodeHref(edge.service_id)} scroll={false}>
                     <span className="flex items-center justify-between">
                       <span className="w-44 truncate text-gray-300 hover:text-white">{edge.label}</span>
                       <span className="rounded bg-[#333] px-1.5 py-0.5 text-xs text-gray-500">{edge.type}</span>
@@ -146,8 +146,8 @@ export async function SidePanel({ nodeId, searchQuery }: SidePanelProps) {
           ) : (
             <ul className="space-y-2">
               {inboundRes.rows.map((edge) => (
-                <li key={`${edge.project_id}-${edge.type}`} className="rounded bg-[#1a1a1a] p-2 text-sm">
-                  <Link href={createNodeHref(edge.project_id)} scroll={false}>
+                <li key={`${edge.service_id}-${edge.type}`} className="rounded bg-[#1a1a1a] p-2 text-sm">
+                  <Link href={createNodeHref(edge.service_id)} scroll={false}>
                     <span className="flex items-center justify-between">
                       <span className="w-44 truncate text-gray-300 hover:text-white">{edge.label}</span>
                       <span className="rounded bg-[#333] px-1.5 py-0.5 text-xs text-gray-500">{edge.type}</span>

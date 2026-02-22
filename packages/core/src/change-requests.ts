@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
 export type ChangeRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-export type ChangeRequestType = 'RELATION_UPSERT' | 'RELATION_DELETE' | 'OBJECT_PATCH';
+export type ChangeRequestType = 'RELATION_UPSERT' | 'RELATION_DELETE' | 'OBJECT_PATCH' | 'OBJECT_CREATE';
 
 import {
   parseDependencyUpsertPayload,
+  parseObjectCreatePayload,
   type DependencyUpsertPayload,
+  type ObjectCreatePayload,
   type RelationSource,
 } from './change-request-payloads';
 
@@ -28,7 +30,7 @@ interface WorkspaceScopedOptions {
   workspaceId?: string | null;
 }
 
-const CHANGE_REQUEST_TYPES: ChangeRequestType[] = ['RELATION_UPSERT', 'RELATION_DELETE', 'OBJECT_PATCH'];
+const CHANGE_REQUEST_TYPES: ChangeRequestType[] = ['RELATION_UPSERT', 'RELATION_DELETE', 'OBJECT_PATCH', 'OBJECT_CREATE'];
 const CHANGE_REQUEST_STATUSES: ChangeRequestStatus[] = ['PENDING', 'APPROVED', 'REJECTED'];
 const CHANGE_REQUEST_SOURCES: RelationSource[] = ['manual', 'scan', 'inference'];
 
@@ -117,6 +119,15 @@ async function resolveServiceObjectId(db: DbLike, workspaceId: string, urn: stri
   return result.rows[0]?.id ?? null;
 }
 
+// object_type 무관하게 URN으로 Object 조회 (OBJECT_CREATE 승인 시 parentUrn 해결에 사용)
+async function resolveObjectByUrn(db: DbLike, workspaceId: string, urn: string): Promise<string | null> {
+  const result = await db.query<{ id: string }>(
+    `SELECT id FROM objects WHERE workspace_id = $1 AND urn = $2 LIMIT 1`,
+    [workspaceId, urn],
+  );
+  return result.rows[0]?.id ?? null;
+}
+
 export async function listChangeRequests(
   db: DbLike,
   status: ChangeRequestStatus = 'PENDING',
@@ -159,6 +170,12 @@ export async function createChangeRequest(
     }
     assertAllowedChangeRequestSource(parsed.source);
     payload = parsed;
+  } else if (requestType === 'OBJECT_CREATE') {
+    try {
+      payload = parseObjectCreatePayload(input.payload);
+    } catch {
+      throw new Error('INVALID_OBJECT_CREATE_PAYLOAD');
+    }
   }
 
   const result = await db.query<ChangeRequestRow>(
@@ -204,7 +221,34 @@ export async function applyChangeRequest(
         throw new Error('INVALID_RELATION_PAYLOAD');
       }
 
-      if (dependencyPayload) {
+      // OBJECT_CREATE 승인: objects 테이블에 새 Object INSERT
+    if (cr.request_type === 'OBJECT_CREATE') {
+      let objPayload: ObjectCreatePayload;
+      try {
+        objPayload = parseObjectCreatePayload(cr.payload);
+      } catch {
+        throw new Error('INVALID_OBJECT_CREATE_PAYLOAD');
+      }
+      const parentId = objPayload.parentUrn
+        ? await resolveObjectByUrn(db, workspaceId, objPayload.parentUrn)
+        : null;
+      await db.query(
+        `INSERT INTO objects
+         (id, workspace_id, object_type, name, display_name, urn, parent_id, visibility, granularity, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'VISIBLE', $8, $9::jsonb)
+         ON CONFLICT (workspace_id, urn) WHERE urn IS NOT NULL DO NOTHING`,
+        [
+          randomUUID(), workspaceId,
+          objPayload.objectType, objPayload.name,
+          objPayload.displayName ?? null,
+          objPayload.urn, parentId,
+          objPayload.granularity,
+          JSON.stringify(objPayload.metadata ?? {}),
+        ],
+      );
+    }
+
+    if (dependencyPayload) {
         assertAllowedChangeRequestSource(dependencyPayload.source);
 
         const fromUrn = dependencyPayload.fromId;
